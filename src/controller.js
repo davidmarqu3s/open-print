@@ -1,6 +1,10 @@
 figma.showUI(__html__, {width:320,height:560,themeColors:true});
 let exportRun=Promise.resolve(),exportId=0,profileSave=Promise.resolve();
-function selection() { const selected=figma.currentPage.selection;figma.ui.postMessage({type:'selection',frames:selected.map(n=>({id:n.id,name:n.name,width:n.width,height:n.height,type:n.type}))}); }
+// Show bleed adds this layer at the bottom of a frame. It holds the frame's background, sized to trim plus bleed, and its plugin data records the bleed in frame units.
+const BLEED_KEY='open-print-bleed',BLEED_GUIDE={type:'SOLID',color:{r:1,g:0.2,b:0.2}};
+const bleedLayer=frame=>(frame.children||[]).find(c=>typeof c.getPluginData==='function'&&c.getPluginData(BLEED_KEY)!=='')||null;
+const bleedOf=frame=>{const layer=bleedLayer(frame),bleed=layer?Number(layer.getPluginData(BLEED_KEY)):0;return Number.isFinite(bleed)&&bleed>0?bleed:0;};
+function selection() { const selected=figma.currentPage.selection;figma.ui.postMessage({type:'selection',frames:selected.map(n=>({id:n.id,name:n.name,width:n.width,height:n.height,type:n.type,bleed:n.type==='FRAME'?bleedOf(n):0}))}); }
 figma.on('selectionchange',selection);
 // Figma rasterises these effects at 144 ppi in PDF exports. Other effect types are untested.
 const EFFECTS=['DROP_SHADOW','INNER_SHADOW','LAYER_BLUR','BACKGROUND_BLUR'];
@@ -62,19 +66,49 @@ async function rasterise(original,copy,state,topLevel=false) {
  return ppi;
 }
 // Returns the PDF and the factor its page must be scaled down by. The copy never touches the original.
-async function exportFrame(node,found) {
- if(!found.effects)return {pdf:await node.exportAsync({format:'PDF'}),scale:1};
- const scale=Math.min(TARGET_PPI/EFFECT_PPI+0.02,MAX_EFFECT_EDGE/(2*Math.max(node.width,node.height)));
- let copy=null,copied=false;
+// A frame with bleed is exported from a copy inside a clipping frame of trim plus bleed, without the bleed layer's guide outline.
+async function exportFrame(node,found,bleed=0) {
+ if(!found.effects&&!bleed)return {pdf:await node.exportAsync({format:'PDF'}),scale:1};
+ const width=node.width+2*bleed,height=node.height+2*bleed;
+ const scale=found.effects?Math.min(TARGET_PPI/EFFECT_PPI+0.02,MAX_EFFECT_EDGE/(2*Math.max(width,height))):1;
+ let copy=null,wrapper=null,copied=false;
  try{
-  copy=node.clone();figma.currentPage.appendChild(copy);copy.rescale(scale);copied=true;
-  const state={images:[]},ppi=Math.min(Math.round(EFFECT_PPI*scale),found.raster?await rasterise(node,copy,state,true):Infinity);
-  let pdf=await copy.exportAsync({format:'PDF'});
-  for(let attempt=0;!hasImages(pdf,state.images);attempt++){if(attempt===RETRIES)throw new Error('Figma didn’t finish preparing the image. Try exporting again.');await new Promise(resolve=>setTimeout(resolve,RETRY_MS));pdf=await copy.exportAsync({format:'PDF'});}
+  copy=node.clone();
+  if(bleed){
+   wrapper=figma.createFrame();wrapper.name=node.name;wrapper.fills=[];wrapper.clipsContent=true;figma.currentPage.appendChild(wrapper);wrapper.resize(width,height);
+   wrapper.appendChild(copy);copy.x=bleed;copy.y=bleed;const guide=bleedLayer(copy);if(guide)guide.strokes=[];
+  }else figma.currentPage.appendChild(copy);
+  const target=wrapper||copy;if(scale!==1)target.rescale(scale);copied=true;
+  const state={images:[]},ppi=found.effects?Math.min(Math.round(EFFECT_PPI*scale),found.raster?await rasterise(node,copy,state,true):Infinity):null;
+  let pdf=await target.exportAsync({format:'PDF'});
+  for(let attempt=0;!hasImages(pdf,state.images);attempt++){if(attempt===RETRIES)throw new Error('Figma didn’t finish preparing the image. Try exporting again.');await new Promise(resolve=>setTimeout(resolve,RETRY_MS));pdf=await target.exportAsync({format:'PDF'});}
   return {pdf,scale,ppi};
  }
- catch(error){if(found.raster)throw new Error('Couldn’t render the noise or texture in '+node.name+(copied?': '+(error.message||error):'. Figma needs to make a temporary copy of the frame, so check you can edit this file.'));return {pdf:await node.exportAsync({format:'PDF'}),scale:1,ppi:EFFECT_PPI};}
- finally{if(copy&&!copy.removed)copy.remove();}
+ catch(error){
+  if(found.raster)throw new Error('Couldn’t render the noise or texture in '+node.name+(copied?': '+(error.message||error):'. Figma needs to make a temporary copy of the frame, so check you can edit this file.'));
+  if(bleed)throw new Error('Couldn’t add the bleed to '+node.name+(copied?': '+(error.message||error):'. Figma needs to make a temporary copy of the frame, so check you can edit this file.'));
+  return {pdf:await node.exportAsync({format:'PDF'}),scale:1,ppi:EFFECT_PPI};
+ }
+ finally{if(wrapper&&!wrapper.removed)wrapper.remove();else if(copy&&!copy.removed)copy.remove();}
+}
+// Puts the bleed on the canvas: the frame's fills move onto a locked layer of trim plus bleed with a dashed guide outline, and Clip content turns off so artwork past the edge shows. Running it again resizes the layer.
+function showBleed(frame,bleed) {
+ let layer=bleedLayer(frame);
+ if(!layer){
+  layer=figma.createRectangle();layer.name='Bleed';frame.insertChild(0,layer);
+  if(frame.layoutMode&&frame.layoutMode!=='NONE')layer.layoutPositioning='ABSOLUTE';
+  layer.fills=frame.fills;frame.fills=[];
+  layer.strokes=[BLEED_GUIDE];layer.strokeWeight=1;layer.strokeAlign='OUTSIDE';layer.dashPattern=[4,4];
+  frame.setPluginData(BLEED_KEY+'-clip',frame.clipsContent?'true':'false');frame.clipsContent=false;
+ }
+ layer.locked=false;layer.resize(frame.width+2*bleed,frame.height+2*bleed);layer.x=-bleed;layer.y=-bleed;
+ layer.constraints={horizontal:'STRETCH',vertical:'STRETCH'};layer.setPluginData(BLEED_KEY,String(bleed));layer.locked=true;
+}
+// Undoes showBleed, keeping any change made to the background on the bleed layer.
+function hideBleed(frame) {
+ const layer=bleedLayer(frame);if(!layer)return;
+ frame.fills=layer.fills;layer.remove();
+ frame.clipsContent=frame.getPluginData(BLEED_KEY+'-clip')!=='false';frame.setPluginData(BLEED_KEY+'-clip','');
 }
 async function runExport(ids,id) {
  const current=()=>id===exportId;
@@ -84,9 +118,9 @@ async function runExport(ids,id) {
   for(const nodeId of ids){const n=await figma.getNodeByIdAsync(nodeId);if(!n||n.type!=='FRAME'||n.parent===null)throw new Error('Selection must contain frames.');nodes.push(n);}
   const issues=[],effects=nodes.map(n=>inspect(n,issues,n));
   if(issues.length){if(current())figma.ui.postMessage({type:'error',text:issues.slice(0,5).map(i=>i.text).join('\n'),issues});return;}
-  const pdfs=[],sizes=[],scales=[],ppi=[];
-  for(let i=0;i<nodes.length;i++){if(!current())return;figma.ui.postMessage({type:'status',text:'Exporting frame '+(i+1)+' of '+nodes.length+'…'});sizes.push({width:nodes[i].width,height:nodes[i].height});const result=await exportFrame(nodes[i],effects[i]);pdfs.push(result.pdf);scales.push(result.scale);if(result.ppi)ppi.push(result.ppi);}
-  if(current())figma.ui.postMessage({type:'pdfs',pdfs,sizes,scales,effectPpi:ppi.length?Math.min(...ppi):null});
+  const pdfs=[],sizes=[],bleeds=[],scales=[],ppi=[];
+  for(let i=0;i<nodes.length;i++){if(!current())return;figma.ui.postMessage({type:'status',text:'Exporting frame '+(i+1)+' of '+nodes.length+'…'});sizes.push({width:nodes[i].width,height:nodes[i].height});bleeds.push(bleedOf(nodes[i]));const result=await exportFrame(nodes[i],effects[i],bleeds[i]);pdfs.push(result.pdf);scales.push(result.scale);if(result.ppi)ppi.push(result.ppi);}
+  if(current())figma.ui.postMessage({type:'pdfs',pdfs,sizes,bleeds,scales,effectPpi:ppi.length?Math.min(...ppi):null});
  }catch(error){if(current())figma.ui.postMessage({type:'error',text:error.message||String(error)});}
 }
 figma.ui.onmessage=async msg=>{
@@ -95,6 +129,15 @@ figma.ui.onmessage=async msg=>{
  if(msg.type==='ready'){selection();return;}
  if(msg.type==='show-layer'){try{const node=await figma.getNodeByIdAsync(String(msg.id));if(node&&node.type!=='PAGE'&&node.type!=='DOCUMENT')figma.viewport.scrollAndZoomIntoView([node]);}catch(error){/* The layer was deleted. */}return;}
  if(msg.type==='cancel'){exportId++;return;}
+ if(msg.type==='show-bleed'||msg.type==='hide-bleed'){
+  try{
+   const bleed=Number(msg.bleed);if(msg.type==='show-bleed'&&!(bleed>0&&bleed<=1000))throw new Error('Enter a bleed between 0 and 1000 units.');
+   const nodes=[];for(const nodeId of Array.isArray(msg.ids)?msg.ids:[]){const n=await figma.getNodeByIdAsync(nodeId);if(n&&n.type==='FRAME')nodes.push(n);}
+   if(!nodes.length)throw new Error('Select one or more frames.');
+   for(const n of nodes)if(msg.type==='show-bleed')showBleed(n,bleed);else hideBleed(n);
+  }catch(error){figma.ui.postMessage({type:'error',text:error.message||String(error)});}
+  selection();return;
+ }
  if(msg.type!=='export')return;
  // Exports run one at a time. Cancel bumps exportId so a running export stops posting, and a new one waits its turn.
  const id=++exportId;exportRun=exportRun.then(()=>runExport(msg.ids,id));await exportRun;

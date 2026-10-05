@@ -45,6 +45,12 @@ input,select,button{font:inherit;letter-spacing:inherit;color:inherit}
 input[type=number]{-moz-appearance:textfield}input::-webkit-outer-spin-button,input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
 .dims{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px}
 .check.below{margin-top:8px}
+.bleed-row{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:8px;align-items:end}
+.labelled{display:flex;flex-direction:column;gap:4px;min-width:0}
+.field-label{color:var(--text2)}
+.field.plain input{padding-left:8px}
+.bleed-row button{height:24px;padding:0 8px;font-weight:400}
+.trio{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:8px}
 select.native{display:none}
 select,.select{appearance:none;-webkit-appearance:none;display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;height:24px;padding:0 8px;border:1px solid transparent;border-radius:5px;background:var(--bg2);font-weight:400;text-align:left;cursor:default}
 .select-label{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -69,7 +75,8 @@ button,.button{display:inline-flex;align-items:center;justify-content:center;hei
 .primary:hover:not(:disabled){background:var(--brand-hover)}
 .primary:disabled{background:var(--disabled);color:var(--ondisabled)}
 .secondary{background:none;border:1px solid var(--border);color:var(--text)}
-.secondary:hover{background:var(--bg-hover)}
+.secondary:hover:not(:disabled){background:var(--bg-hover)}
+.secondary:disabled{color:var(--text3)}
 button:focus-visible,.button:focus-within{outline:2px solid var(--selected);outline-offset:1px}
 .file{position:relative;width:100%;height:24px;margin-top:8px;overflow:hidden}
 .file input{position:absolute;inset:0;opacity:0;cursor:default}
@@ -107,6 +114,13 @@ footer{flex:none;border-top:1px solid var(--border)}
 <label class="check below"><input id="auto-size" type="checkbox" checked><span>Use frame size</span></label>
 <p class="hint" id="size-hint">Select frames to infer their print size.</p>
 <div class="match" id="size-match" hidden><span id="size-match-text"></span><button id="size-snap" class="link"></button></div></section>
+<section><div class="head"><h2>Bleed and marks</h2></div>
+<div class="bleed-row"><div class="labelled"><label class="field-label" for="bleed">Bleed</label><label class="field plain" id="bleed-field" title="Bleed on each side"><input id="bleed" type="number" min="0" max="20" step=".5"><span class="suffix length-unit">mm</span></label></div><button id="show-bleed" class="secondary">Show bleed</button><button id="hide-bleed" class="secondary">Hide</button></div>
+<p class="hint" id="bleed-hint"></p>
+<label class="check below"><input id="marks" type="checkbox"><span>Crop marks</span></label>
+<div id="marks-options" hidden><div class="trio"><div class="labelled"><label class="field-label" for="mark-offset">Offset</label><label class="field plain" id="mark-offset-field" title="Distance from the trim to the start of each mark"><input id="mark-offset" type="number" min="0" max="20" step=".5"><span class="suffix length-unit">mm</span></label></div><div class="labelled"><label class="field-label" for="mark-length">Length</label><label class="field plain" id="mark-length-field" title="Length of each mark"><input id="mark-length" type="number" min="2" max="20" step=".5"><span class="suffix length-unit">mm</span></label></div><div class="labelled"><label class="field-label" for="mark-weight">Thickness</label><label class="field plain" id="mark-weight-field" title="Line thickness of the marks"><input id="mark-weight" type="number" min=".1" max="2" step=".05"><span class="suffix">pt</span></label></div></div>
+<p class="hint error" id="marks-error"></p></div>
+<p class="hint" id="sheet-hint"></p></section>
 <section><div class="head"><h2>Color profile</h2></div><select id="profile-mode" aria-label="Color profile"><option value="none">No profile</option><option value="custom">Custom CMYK profile…</option></select>
 <div id="custom-profile" hidden><label class="button secondary file"><input id="profile" type="file" accept=".icc,.icm"><span>Import ICC file…</span></label></div>
 <p class="hint" id="profile-hint"></p></section>

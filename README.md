@@ -32,7 +32,15 @@ Figma frames carry no physical size, so the plugin uses Figma’s native PDF sca
 
 For example, a 907 × 1276 frame becomes 319.97 × 450.14 mm. If you meant 320 × 450 mm, enter that. When a frame is within 0.5 mm of a standard size (A0–A6, DL, B1–B5, SRA3, 50 × 70 cm and 70 × 100 cm posters, Letter, Legal, Tabloid or a business card), a **Use A3**-style button enters the exact size for you. Typing a size turns off automatic sizing and applies your size to every page. Manual sizes persist when the selection changes.
 
-Artwork stays at its native size, aligned to the top left. Changing the page size moves the PDF page edges: a larger page adds space and a smaller one crops. The plugin never resizes or edits your Figma layers. Frames with shadows or blurs are exported from a temporary scaled copy that is deleted straight away (see below).
+Artwork stays at its native size, aligned to the top left. Changing the page size moves the PDF page edges: a larger page adds space and a smaller one crops. Exporting never resizes or edits your Figma layers; only **Show bleed** changes the file (see below). Frames with shadows or blurs are exported from a temporary scaled copy that is deleted straight away (see below).
+
+## Bleed and crop marks
+
+Bleed is built on the canvas, so you can see it before exporting. Select frames, enter a bleed (3 mm by default) and click **Show bleed**. Each frame gets a locked **Bleed** layer at the bottom, sized to the trim plus the bleed on every side, and the frame’s background fills move onto it. **Clip content** is turned off, so images placed past the frame edge show exactly as they will print. The dashed red outline marks the bleed edge and is never exported. **Hide** moves the background back onto the frame, removes the layer and restores clipping.
+
+The frame is always the trim size. Anything beyond the bleed edge is cut from the PDF.
+
+Tick **Crop marks** to add marks outside the bleed. Set their offset from the trim, length and thickness (0.25 pt by default). The offset can’t be smaller than the bleed, so marks never sit on artwork. Marks print in Registration on every plate. The plugin shows the final PDF page size, and sets the TrimBox to the frame, the BleedBox to the trim plus bleed and the MediaBox to the whole sheet.
 
 ## What’s supported
 
@@ -44,7 +52,7 @@ Artwork stays at its native size, aligned to the top left. Changing the page siz
 - **Effects:** drop shadow, inner shadow, layer blur and background blur. Figma bakes these into 144 ppi bitmaps when exporting PDFs, so frames that use them are exported from a temporary copy scaled up about 2.1× and scaled back down, giving roughly 300 ppi at print size. The copy is removed immediately afterwards. Frames longer than about 1,370 mm, or files where Figma won’t allow the copy (such as view-only files), fall back to a lower resolution, and the plugin tells you.
 - **Noise and texture:** Figma can’t draw these in a PDF, so in the temporary copy each layer that uses them is replaced with a 300 ppi image of the layer, which is then converted to CMYK with the rest of the page. Everything inside that layer becomes part of the image, including text, so put noise on a background shape rather than the whole frame if you want text to stay vector. Images are capped at 4,096 pixels on their longest side (about 347 mm at 300 ppi), and larger layers come out at a lower resolution, which the plugin tells you. Noise and texture need the temporary copy, so they can’t be exported from view-only files.
 - **Other effects,** such as glass, are rejected before export. Each one is listed under its frame, with a **Show** button that zooms to the layer.
-- **Marks and boxes:** crop marks already in your artwork are kept, but the plugin doesn’t add bleed or marks. MediaBox, CropBox, TrimBox and BleedBox all match the final page size.
+- **Marks and boxes:** see [Bleed and crop marks](#bleed-and-crop-marks). Without bleed or marks, MediaBox, CropBox, TrimBox and BleedBox all match the final page size.
 - **Text:** exported as vector outlines, so it isn’t editable in Illustrator. Hidden font layers are omitted, and stray close-path commands are cleaned up. Simple vector alpha masks use white mask paint so they import consistently into Illustrator, without changing artwork colours or luminosity masks.
 - **Not supported yet:** PDF/X certification, spot colours and overprint controls.
 

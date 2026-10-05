@@ -169,17 +169,54 @@ var PrintCore = {
   });
   return lowest&&{ppi:Math.round(lowest.ppi),page:lowest.page,pages:doc.getPageCount()};
  },
- async finish(bytes,icc,width,height,profileName,pageSizes) {
+ // Crop marks: offset and length in mm, weight in points. Offset may not be less than the bleed, so marks never sit on artwork.
+ marksProblem(marks,bleed=0) {
+  if(!marks)return '';
+  const ok=(v,min,max)=>Number.isFinite(v)&&v>=min&&v<=max;
+  if(!ok(marks.offset,0,20))return 'Offset must be between 0 and 20 mm.';
+  if(!ok(marks.length,2,20))return 'Length must be between 2 and 20 mm.';
+  if(!ok(marks.weight,0.1,2))return 'Thickness must be between 0.1 and 2 pt.';
+  if(marks.offset+1e-6<bleed)return 'Offset must be at least the bleed ('+Math.round(bleed*100)/100+' mm).';
+  return '';
+ },
+ // The margin around the trim on each side, in mm: the bleed, or the marks' offset plus length when there are marks.
+ margin(bleed=0,marks=null) { return Math.max(bleed,marks?marks.offset+marks.length:0); },
+ // Draws two marks per corner in a Separation All colour space, which prints on every plate (Registration).
+ drawMarks(doc,page,trim,margin,marks) {
+  const {PDFName,PDFOperator,PDFNumber}=PDFLib,pt=mm=>mm*72/25.4;
+  if(!doc.__registration)doc.__registration=doc.context.register(doc.context.obj([PDFName.of('Separation'),PDFName.of('All'),PDFName.of('DeviceCMYK'),doc.context.obj({FunctionType:2,Domain:[0,1],C0:[0,0,0,0],C1:[1,1,1,1],N:1})]));
+  const {Resources}=page.node.normalizedEntries();
+  let spaces=Resources.lookup(PDFName.of('ColorSpace'));if(!spaces){spaces=doc.context.obj({});Resources.set(PDFName.of('ColorSpace'),spaces);}
+  spaces.set(PDFName.of('OPRegistration'),doc.__registration);
+  const off=pt(marks.offset),len=pt(marks.length),x0=margin,y0=margin,x1=margin+trim.width,y1=margin+trim.height;
+  const op=(name,...args)=>PDFOperator.of(name,args.map(a=>typeof a==='number'?PDFNumber.of(a):a));
+  const ops=[op('q'),op('CS',PDFName.of('OPRegistration')),op('SCN',1),op('w',marks.weight*1),op('J',0)];
+  const line=(ax,ay,bx,by)=>ops.push(op('m',ax,ay),op('l',bx,by),op('S'));
+  for(const [x,sx] of [[x0,-1],[x1,1]])for(const [y,sy] of [[y0,-1],[y1,1]]){line(x+sx*off,y,x+sx*(off+len),y);line(x,y+sy*off,x,y+sy*(off+len));}
+  ops.push(op('Q'));
+  // A stream of its own after everything else, so the artwork's translation doesn't apply to the marks.
+  page.node.addContentStream(doc.context.register(doc.context.contentStream(ops)));
+ },
+ // options.bleeds: each page's bleed in mm, already exported around the artwork. options.marks: crop marks, or null.
+ async finish(bytes,icc,width,height,profileName,pageSizes,options={}) {
   if(icc) this.validateICC(icc);
   const {PDFDocument,PDFName,PDFString}=PDFLib;
   const doc=await PDFDocument.load(bytes);
   this.cleanPaths(doc);
   this.normalizeAlphaMasks(doc);
   this.dropUnusedColorSpaces(doc);
-  const pages=doc.getPages();
+  const pages=doc.getPages(),marks=options.marks||null,pt=mm=>mm*72/25.4;
   if(pageSizes && pageSizes.length!==pages.length)throw new Error('Frame and PDF page counts do not match.');
   const sizes=pages.map((page,i)=>{const size=pageSizes?pageSizes[i]:{width,height};return {width:this.points(size.width),height:this.points(size.height)};});
-  for(let i=0;i<pages.length;i++) { const page=pages[i],w=sizes[i].width,h=sizes[i].height; const old=page.getHeight();page.translateContent(0,h-old);page.setMediaBox(0,0,w,h);page.setCropBox(0,0,w,h);page.setTrimBox(0,0,w,h);page.setBleedBox(0,0,w,h); }
+  for(let i=0;i<pages.length;i++) {
+   const page=pages[i],w=sizes[i].width,h=sizes[i].height,bleedMm=options.bleeds&&options.bleeds[i]||0;
+   const problem=this.marksProblem(marks,bleedMm);if(problem)throw new Error(problem);
+   const b=pt(bleedMm),m=pt(this.margin(bleedMm,marks)),old=page.getHeight();
+   // The exported page is trim plus bleed. Its top left goes to the bleed corner, so the trim lands on the TrimBox.
+   page.translateContent(m-b,h+2*m-(m-b)-old);
+   page.setMediaBox(0,0,w+2*m,h+2*m);page.setCropBox(0,0,w+2*m,h+2*m);page.setTrimBox(m,m,w,h);page.setBleedBox(m-b,m-b,w+2*b,h+2*b);
+   if(marks)this.drawMarks(doc,page,{width:w,height:h},m,marks);
+  }
   doc.catalog.delete(PDFName.of('OutputIntents'));
   if(icc) {
   const profile=doc.context.register(doc.context.flateStream(icc,{N:4}));
