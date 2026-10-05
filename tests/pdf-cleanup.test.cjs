@@ -50,3 +50,30 @@ test('rewritten streams use their new compression filter, never the original enc
  const contents=result.getPages()[0].node.Contents();const refs=contents instanceof PDFLib.PDFArray?contents.asArray():[contents];
  const text=refs.map(ref=>Buffer.from(decodePDFRawStream(result.context.lookup(ref)).decode()).toString()).join('');assert.match(text,/ 0 0 m 10 10 l h f/);
 });
+
+test('Alpha mask normalization whitens only simple mask paint, preserving artwork and luminosity masks',async()=>{
+ const {PDFDocument,PDFName,decodePDFRawStream}=PDFLib,doc=await PDFDocument.create(),page=doc.addPage([100,100]);
+ const paint='0.89 0.784 0.616 0.969 k\n0 0 m 10 0 l 10 10 l h f\n';
+ const form=doc.context.register(doc.context.flateStream(Buffer.from(paint),{Type:'XObject',Subtype:'Form',BBox:[0,0,100,100],Matrix:[1,0,0,1,2,3],Group:{S:'Transparency'},Resources:{}}));
+ const alpha=doc.context.register(doc.context.obj({S:'Alpha',G:form,TR:PDFName.of('Identity')})),luminosity=doc.context.register(doc.context.obj({S:'Luminosity',G:form}));
+ page.node.set(PDFName.of('Resources'),doc.context.obj({XObject:{Visible:form},ExtGState:{A:{SMask:alpha},L:{SMask:luminosity}}}));
+ page.node.set(PDFName.of('Contents'),doc.context.register(doc.context.flateStream(Buffer.from('/Visible Do'))));
+ const result=await PDFDocument.load(await context.PrintCore.finish(await doc.save(),null,100,100,''));
+ const resources=result.getPages()[0].node.Resources(),states=resources.lookup(PDFName.of('ExtGState'));
+ const mask=key=>states.lookup(PDFName.of(key)).lookup(PDFName.of('SMask')).lookup(PDFName.of('G'));
+ const decode=stream=>Buffer.from(decodePDFRawStream(stream).decode()).toString();
+ assert.equal(decode(mask('A')),paint.replace('0.89 0.784 0.616 0.969 k','0 0 0 0 k'));
+ assert.equal(decode(mask('L')),paint);assert.equal(decode(resources.lookup(PDFName.of('XObject')).lookup(PDFName.of('Visible'))),paint);
+ assert.deepEqual(mask('A').dict.lookup(PDFName.of('BBox')).asArray().map(n=>n.asNumber()),[0,0,100,100]);
+ assert.deepEqual(mask('A').dict.lookup(PDFName.of('Matrix')).asArray().map(n=>n.asNumber()),[1,0,0,1,2,3]);
+ assert.equal(states.lookup(PDFName.of('A')).lookup(PDFName.of('SMask')).get(PDFName.of('TR')),PDFName.of('Identity'));
+});
+test('Alpha mask solid-color rewriting supports gray and RGB but skips complex content',()=>{
+ const rewrite=text=>Buffer.from(context.PrintCore.whiteMaskPaint(Buffer.from(text))).toString();
+ assert.equal(rewrite('0.5 g 0 0 10 10 re f'),'1 g 0 0 10 10 re f');
+ assert.equal(rewrite('0.5 G 0 0 m 10 10 l S'),'1 G 0 0 m 10 10 l S');
+ assert.equal(rewrite('0 1 1 0 K 0 0 m 10 10 l S'),'0 0 0 0 K 0 0 m 10 10 l S');
+ assert.equal(rewrite('0.2 0.3 0.4 RG 0 0 m 10 10 l S'),'1 1 1 RG 0 0 m 10 10 l S');
+ assert.equal(rewrite('0.2 0.3 0.4 rg 0 0 10 10 re f'),'1 1 1 rg 0 0 10 10 re f');
+ for(const text of ['/Im Do','/Shade sh','/GS gs 0 g 0 0 10 10 re f','BI /W 1 ID x EI','(0 g) Tj','0 g % 0 g\n0 0 10 10 re f'])assert.equal(rewrite(text),text);
+});

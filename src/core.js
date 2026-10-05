@@ -25,6 +25,34 @@ var PrintCore = {
   }
   return '';
  },
+ // Alpha masks depend on coverage, not paint colour. White also imports correctly
+ // into editors that translate these masks into luminosity-based opacity masks.
+ whiteMaskPaint(bytes) {
+  let text='';for(let i=0;i<bytes.length;i+=8192)text+=String.fromCharCode(...bytes.subarray(i,i+8192));
+  const arity={m:2,l:2,c:6,v:4,y:4,re:4,h:0,f:0,'f*':0,F:0,S:0,s:0,B:0,'B*':0,b:0,'b*':0,n:0,q:0,Q:0,cm:6,w:1,J:1,j:1,M:1,k:4,K:4,rg:3,RG:3,g:1,G:1};
+  const colors={k:'0 0 0 0',K:'0 0 0 0',rg:'1 1 1',RG:'1 1 1',g:'1',G:'1'},replacements=[];let operands=[];
+  for(const match of text.matchAll(/\S+/g)){
+   const token=match[0];if(/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$/.test(token)){operands.push(match);continue;}
+   if(!Object.prototype.hasOwnProperty.call(arity,token)||operands.length!==arity[token])return bytes;
+   if(colors[token])replacements.push({start:operands[0].index,end:match.index,text:colors[token]+' '});
+   operands=[];
+  }
+  if(operands.length||!replacements.length)return bytes;
+  for(const replacement of replacements.reverse())text=text.slice(0,replacement.start)+replacement.text+text.slice(replacement.end);
+  return Uint8Array.from(text,c=>c.charCodeAt(0));
+ },
+ normalizeAlphaMasks(doc) {
+  const {PDFName,PDFDict,PDFRawStream,decodePDFRawStream}=PDFLib;
+  for(const [ref,mask] of doc.context.enumerateIndirectObjects()){
+   if(!(mask instanceof PDFDict)||mask.get(PDFName.of('S'))!==PDFName.of('Alpha'))continue;
+   const form=doc.context.lookup(mask.get(PDFName.of('G')));if(!(form instanceof PDFRawStream)||form.dict.get(PDFName.of('Subtype'))!==PDFName.of('Form'))continue;
+   const bytes=decodePDFRawStream(form).decode(),paint=this.whiteMaskPaint(bytes);if(paint===bytes)continue;
+   const white=doc.context.flateStream(paint);
+   for(const [key,value] of form.dict.entries())if(!['Length','Filter','DecodeParms'].includes(key.decodeText()))white.dict.set(key,value);
+   // Do not recolour a Form shared with visible artwork or a luminosity mask.
+   mask.set(PDFName.of('G'),doc.context.register(white));
+  }
+ },
  // PDF path state is separate from q/Q graphics state. A paint or n clears it.
  cleanContent(bytes,state={active:false}) {
   if(state.unsupported)return bytes;const originalActive=state.active;
@@ -80,6 +108,7 @@ var PrintCore = {
   const {PDFDocument,PDFName,PDFString}=PDFLib;
   const doc=await PDFDocument.load(bytes);
   this.cleanPaths(doc);
+  this.normalizeAlphaMasks(doc);
   const pages=doc.getPages();
   if(pageSizes && pageSizes.length!==pages.length)throw new Error('Frame and PDF page counts do not match.');
   const sizes=pages.map((page,i)=>{const size=pageSizes?pageSizes[i]:{width,height};return {width:this.points(size.width),height:this.points(size.height)};});

@@ -6,7 +6,7 @@ An open-source Figma plugin for exporting selected frames as a CMYK vector PDF. 
 
 ## Install
 
-1. Download `open-print-v0.2.8.zip` from [Releases](https://github.com/davidmarqu3s/open-print/releases) and extract it to a permanent folder.
+1. Download `open-print-v0.2.9.zip` from [Releases](https://github.com/davidmarqu3s/open-print/releases) and extract it to a permanent folder.
 2. In Figma desktop, choose **Plugins → Development → Import plugin from manifest…** and select its `manifest.json`.
 3. Select your frames and run **Plugins → Development → Open Print**.
 4. Keep **Use frame size** enabled, or enter your final width and height. Use the **Units** picker to choose **mm** or **in**.
@@ -34,7 +34,7 @@ Artwork remains at its native size, aligned to the top left. Page resizing chang
 - Gradients and visible effects are rejected before export.
 - Crop marks already in the artwork are retained; new bleed or marks are not generated.
 - MediaBox, CropBox, TrimBox and BleedBox all use the final page size.
-- Text exports as vector outlines; editable Illustrator text is not retained. The converter omits hidden font layers and the PDF finishing step removes orphan close-path commands.
+- Text exports as vector outlines; editable Illustrator text is not retained. The converter omits hidden font layers and the PDF finishing step removes orphan close-path commands. Simple vector alpha masks use white mask paint for consistent Illustrator import, without changing artwork colours or luminosity masks.
 - PDF/X certification, spot colors and overprint controls are outside this version’s scope.
 - Automatically downloads the pinned Ghostscript WebAssembly engine from its public upstream GitHub repository when first exporting. The download is verified against its size and SHA-256 checksum before execution. Internet access is required to load the engine; subsequent exports in the same plugin session reuse it. Artwork and PDFs are never uploaded.
 - The manifest permits only the exact engine download URL. All 15 ICC profiles remain bundled using lossless compression. The build rejects controller plus UI code larger than 15,000,000 bytes.
