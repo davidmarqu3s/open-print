@@ -1,4 +1,4 @@
-figma.showUI(__html__, {width:420,height:600,themeColors:true});
+figma.showUI(__html__, {width:320,height:560,themeColors:true});
 let busy=false,profileSave=Promise.resolve();
 function selection() { const selected=figma.currentPage.selection;figma.ui.postMessage({type:'selection',frames:selected.map(n=>({id:n.id,name:n.name,width:n.width,height:n.height,type:n.type}))}); }
 figma.on('selectionchange',selection);
