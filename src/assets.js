@@ -12,12 +12,23 @@ const OpenPrintAssets=(()=>{
   for(let i=stride;stride&&i<bytes.length;i++)bytes[i]=(bytes[i]+bytes[i-stride])&255;
   return bytes;
  }
- async function loadEngine(signal){
+ // Streams the body when a progress callback is given, so the UI can show how much has arrived.
+ async function readBody(response,onProgress){
+  if(!onProgress||!response.body||!response.body.getReader)return new Uint8Array(await response.arrayBuffer());
+  const reader=response.body.getReader(),bytes=new Uint8Array(ENGINE_SIZE);let received=0;
+  for(;;){
+   const {done,value}=await reader.read();if(done)break;
+   if(received+value.length>ENGINE_SIZE){reader.cancel();throw new Error('The conversion engine download is incomplete. Please try again.');}
+   bytes.set(value,received);received+=value.length;onProgress(received/ENGINE_SIZE);
+  }
+  return received===ENGINE_SIZE?bytes:bytes.slice(0,received);
+ }
+ async function loadEngine(signal,onProgress){
   if(engine)return engine.slice();
   let response;
   try{response=await fetch(ENGINE_URL,{signal,credentials:'omit',referrerPolicy:'no-referrer'});}catch(error){throw new Error('Could not download the conversion engine. Check your internet connection and try again.');}
   if(!response.ok)throw new Error('Could not download the conversion engine. Please try again.');
-  const bytes=new Uint8Array(await response.arrayBuffer());
+  const bytes=await readBody(response,onProgress);
   if(bytes.length!==ENGINE_SIZE)throw new Error('The conversion engine download is incomplete. Please try again.');
   const hash=sha256(bytes);
   if(hash!==ENGINE_SHA256)throw new Error('The conversion engine could not be verified. Please try again.');
