@@ -6,11 +6,11 @@ An open-source Figma plugin for exporting selected frames as a CMYK vector PDF. 
 
 ## Install
 
-1. Download `open-print-v0.2.5.zip` from [Releases](https://github.com/davidmarqu3s/open-print/releases) and extract it to a permanent folder.
+1. Download `open-print-v0.2.6.zip` from [Releases](https://github.com/davidmarqu3s/open-print/releases) and extract it to a permanent folder.
 2. In Figma desktop, choose **Plugins → Development → Import plugin from manifest…** and select its `manifest.json`.
 3. Select your frames and run **Plugins → Development → Open Print**.
 4. Keep **Use frame size** enabled, or enter your final width and height. Use the **Units** picker to choose **mm** or **in**.
-5. With multiple frames selected, choose **One multipage PDF** (default) or **Individual PDFs** under **Export as**. A combined PDF uses the first frame’s name; individual PDFs use each frame’s name. Save links remain available if automatic downloads are blocked.
+5. With multiple frames selected, choose **One multipage PDF** (default) or **Individual PDFs** under **Export as**. A combined PDF uses the first frame’s name; individual PDFs use each frame’s original name. After conversion, click each filename to save that PDF. Each explicit click provides the user action required by browser download restrictions; individual mode does not trigger multiple automatic downloads.
 6. Choose one of the 15 included profiles, **No profile** or **Custom CMYK profile…** and export. If needed, click **Save PDF** after conversion.
 
 Use the CMYK ICC profile supplied or approved by your printer. With **No profile**, Ghostscript converts colors to DeviceCMYK using its default CMYK conversion and no ICC OutputIntent is embedded. With a custom profile, it controls conversion and is embedded in the PDF. Different profiles produce different CMYK values.

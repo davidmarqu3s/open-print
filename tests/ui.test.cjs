@@ -1,5 +1,20 @@
 const {test}=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');const PDFLib=require('../vendor/pdf-lib.min.js');
-function ui(bundled={}){const elements={};const make=()=>({value:'',groups:[],options:[],checked:false,remove(){},replaceChildren(){},append(item){if(item.label)this.groups.push(item);else this.options.push(item);}});const el=id=>elements[id]||(elements[id]={...make(),checked:id==='auto-size'});const window={};const messages=[];const context={window,document:{getElementById:el,createElement:make},parent:{postMessage:x=>messages.push(x.pluginMessage)},PROFILE_CATALOG:JSON.parse(fs.readFileSync('src/profiles.json')),BUNDLED_PROFILES:bundled,OpenPrintAssets:{decodeProfile:encoded=>Uint8Array.from(atob(encoded),c=>c.charCodeAt(0))},atob,btoa,Uint8Array,DataView,Number,Error};vm.createContext(context);vm.runInContext(fs.readFileSync('vendor/pdf-lib.min.js','utf8'),context);vm.runInContext(fs.readFileSync('src/core.js','utf8'),context);vm.runInContext(fs.readFileSync('src/ui.js','utf8'),context);return {window,el,messages,context};}
+function ui(bundled={}){
+ const elements={},clicks=[],blobs=new Map();let nextURL=0;
+ const make=tag=>({tag,children:[],value:'',groups:[],options:[],checked:false,
+  get isConnected(){return !!this.root||!!(this.parentNode&&this.parentNode.isConnected);},
+  remove(){if(this.parentNode)this.parentNode.children=this.parentNode.children.filter(child=>child!==this);this.parentNode=null;},
+  replaceChildren(...items){for(const child of this.children)child.parentNode=null;this.children=[];this.append(...items);},
+  append(...items){for(const item of items){item.parentNode=this;this.children.push(item);if(item.label)this.groups.push(item);else this.options.push(item);}},
+  click(){clicks.push({element:this,attached:this.isConnected,filename:this.download,href:this.href});}
+ });
+ const el=id=>elements[id]||(elements[id]=Object.assign(make('div'),{root:true,checked:id==='auto-size'}));
+ const window={},messages=[];
+ const context={window,document:{getElementById:el,createElement:make,createTextNode:text=>({textContent:text})},parent:{postMessage:x=>messages.push(x.pluginMessage)},PROFILE_CATALOG:JSON.parse(fs.readFileSync('src/profiles.json')),BUNDLED_PROFILES:bundled,OpenPrintAssets:{decodeProfile:encoded=>Uint8Array.from(atob(encoded),c=>c.charCodeAt(0))},atob,btoa,Uint8Array,DataView,Number,Error,TextEncoder,TextDecoder,Blob,URL:{createObjectURL:blob=>{const url='blob:test-'+(++nextURL);blobs.set(url,blob);return url;},revokeObjectURL:url=>blobs.delete(url)}};
+ vm.createContext(context);
+ vm.runInContext(fs.readFileSync('vendor/pdf-lib.min.js','utf8'),context);vm.runInContext(fs.readFileSync('src/core.js','utf8'),context);vm.runInContext(fs.readFileSync('src/ui.js','utf8'),context);
+ return {window,el,messages,context,clicks,blobs};
+}
 const frame=(id,width,height)=>({id,name:'Sheet '+id,type:'FRAME',width,height});
 test('manual dimensions stay selected when frames change',async()=>{const {window,el}=ui();await window.onmessage({data:{pluginMessage:{type:'selection',frames:[frame('1',907,1276)]}}});el('width').value='320';el('width').oninput();el('height').value='450';el('height').oninput();await window.onmessage({data:{pluginMessage:{type:'selection',frames:[frame('2',595,842)]}}});assert.equal(el('auto-size').checked,false);assert.equal(el('width').value,'320');assert.equal(el('height').value,'450');});
 test('automatic dimensions update when selection changes',async()=>{const {window,el}=ui();await window.onmessage({data:{pluginMessage:{type:'selection',frames:[frame('1',907,1276)]}}});assert.equal(el('width').value,319.97);await window.onmessage({data:{pluginMessage:{type:'selection',frames:[frame('2',595,842)]}}});assert.equal(el('width').value,209.9);assert.equal(el('height').value,297.04);});
@@ -25,3 +40,33 @@ test('individual PDFs retain vectors, exact embedded ICC and each frame’s auto
 test('individual PDFs apply a manual print size to every file without a profile',async()=>{const {context}=ui(),current={...exportFixture(),auto:false,sizes:null,width:320,height:450,icc:null,name:''};const downloads=await context.prepareDownloads(await convertedPages(),current);assert.equal(downloads.length,2);for(const output of downloads)await inspectOutput(output.bytes,[{width:320,height:450}],null);});
 test('combined format keeps both pages in one PDF with the first frame filename',async()=>{const {context}=ui(),current={...exportFixture(),individual:false};const downloads=await context.prepareDownloads(await convertedPages(),current);assert.equal(downloads.length,1);assert.equal(downloads[0].filename,'Sheet 1.pdf');await inspectOutput(downloads[0].bytes,current.sizes,current.icc);});
 test('individual exports reject a converted PDF with a different frame count',async()=>{const {context}=ui(),current=exportFixture();current.filenames.push('Sheet 3.pdf');const bytes=await convertedPages();await assert.rejects(()=>context.prepareDownloads(bytes,current),/count|match/i);});
+
+const sampleDownloads=()=>[{filename:'Álvaro name tag.pdf',bytes:new Uint8Array([37,80,68,70,1])},{filename:'Sheet 2.pdf',bytes:new Uint8Array([37,80,68,70,2])}];
+const anchors=node=>[...(node.tag==='a'?[node]:[]),...(node.children||[]).flatMap(anchors)];
+test('individual PDF delivery provides attached links with original filenames and no automatic download loop',async()=>{
+ const {context,el,clicks,blobs}=ui(),outputs=sampleDownloads();context.showDownloads(outputs);
+ assert.equal(clicks.length,0);
+ const links=anchors(el('status'));assert.equal(links.length,outputs.length);
+ for(let i=0;i<outputs.length;i++){
+  assert.equal(links[i].download,outputs[i].filename);assert.equal(links[i].isConnected,true);
+  const blob=blobs.get(links[i].href);assert.equal(blob.type,'application/pdf');
+  assert.deepEqual(Buffer.from(await blob.arrayBuffer()),Buffer.from(outputs[i].bytes));
+  links[i].click();
+ }
+ assert.equal(clicks.length,2);assert(clicks.every(click=>click.attached));assert.deepEqual(clicks.map(click=>click.filename),outputs.map(output=>output.filename));
+ assert(!String(el('status').textContent||'').includes('Export complete'));
+});
+test('duplicate frame names keep separate PDF links and unchanged bytes',async()=>{
+ const {context,el,clicks,blobs}=ui(),outputs=sampleDownloads();outputs[1].filename=outputs[0].filename;context.showDownloads(outputs);
+ assert.equal(clicks.length,0);
+ const links=anchors(el('status'));assert.equal(links.length,2);assert.notEqual(links[0].href,links[1].href);
+ for(let i=0;i<links.length;i++){
+  assert.equal(links[i].download,outputs[i].filename);assert.equal(links[i].isConnected,true);
+  assert.deepEqual(Buffer.from(await blobs.get(links[i].href).arrayBuffer()),Buffer.from(outputs[i].bytes));
+ }
+});
+test('single PDF delivery mounts its original filename link before its only automatic click',async()=>{
+ const {context,clicks,blobs}=ui(),output=sampleDownloads()[0];context.showDownloads([output]);
+ assert.equal(clicks.length,1);assert.equal(clicks[0].attached,true);assert.equal(clicks[0].filename,output.filename);
+ const blob=blobs.get(clicks[0].href);assert.equal(blob.type,'application/pdf');assert.deepEqual(Buffer.from(await blob.arrayBuffer()),Buffer.from(output.bytes));
+});
