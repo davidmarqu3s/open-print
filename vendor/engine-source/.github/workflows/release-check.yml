@@ -1,0 +1,81 @@
+name: Release Version Check
+
+on:
+  schedule:
+    # Run weekly on Mondays at 09:00 UTC.
+    - cron: '0 9 * * 1'
+  workflow_dispatch:
+
+permissions:
+  issues: write
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # Ghostscript: open a tracking issue when a newer official release
+      # exists. We never publish a new build without running the tests;
+      # this workflow only flags the update.
+      - name: Check current Ghostscript release
+        id: gs
+        run: |
+          LATEST=$(curl -s https://api.github.com/repos/ArtifexSoftware/ghostpdl-downloads/releases/latest | jq -r '.tag_name')
+          CURRENT_TAG=$(grep GHOSTSCRIPT_TAG versions.env | cut -d= -f2)
+          CURRENT_VER=$(grep GHOSTSCRIPT_VERSION versions.env | cut -d= -f2)
+          echo "Current pinned release: ${CURRENT_VER} (${CURRENT_TAG})"
+          echo "Latest upstream release: ${LATEST}"
+          if [ -z "${LATEST}" ] || [ "${LATEST}" = "null" ]; then
+            echo "Could not determine the latest release; skipping."
+            exit 0
+          fi
+          {
+            echo "latest=${LATEST}"
+            echo "current_tag=${CURRENT_TAG}"
+            echo "current_version=${CURRENT_VER}"
+          } >> "$GITHUB_OUTPUT"
+          if [ "${LATEST}" != "${CURRENT_TAG}" ]; then
+            echo "::warning::A new Ghostscript release is available: ${LATEST} (current: ${CURRENT_TAG})"
+            echo "update_available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "update_available=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Open issue for Ghostscript update
+        if: steps.gs.outputs.update_available == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TITLE: "Ghostscript update available: Current: ${{ steps.gs.outputs.current_version }} Latest: ${{ steps.gs.outputs.latest }}"
+          CURRENT_VER: ${{ steps.gs.outputs.current_version }}
+          CURRENT_TAG: ${{ steps.gs.outputs.current_tag }}
+          LATEST_TAG: ${{ steps.gs.outputs.latest }}
+        run: |
+          BODY="A newer official Ghostscript release is available.
+
+          - Current (pinned in versions.env): ${CURRENT_VER} (${CURRENT_TAG})
+          - Latest upstream: ${LATEST_TAG}
+
+          Update versions.env (GHOSTSCRIPT_VERSION / GHOSTSCRIPT_TAG / checksum), re-validate the build with bash scripts/test.sh, run the benchmark, then bump the package version. Do not publish without passing tests."
+
+          # Avoid duplicate issues for the same upstream release.
+          if gh issue list --search "\"Ghostscript update available\"" --state open --json number --jq 'length' | grep -q '^0$'; then
+            gh issue create \
+              --title "$TITLE" \
+              --body "$BODY"
+          else
+            echo "Issue already open for a Ghostscript update; skipping."
+          fi
+
+      # Emscripten: informational warning only (no auto-updates).
+      - name: Check current Emscripten release
+        run: |
+          LATEST=$(curl -s https://api.github.com/repos/emscripten-core/emscripten/releases/latest | jq -r '.tag_name')
+          CURRENT=$(grep EMSCRIPTEN_VERSION versions.env | cut -d= -f2)
+          echo "Current pinned Emscripten: ${CURRENT}"
+          echo "Latest upstream Emscripten: ${LATEST}"
+          if [ "${LATEST}" != "${CURRENT}" ]; then
+            echo "::warning::A new Emscripten release is available: ${LATEST} (current: ${CURRENT})"
+          fi

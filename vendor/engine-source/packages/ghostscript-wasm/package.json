@@ -1,0 +1,46 @@
+{
+  "name": "@project/ghostscript-wasm",
+  "version": "10.07.1",
+  "description": "Browser-based PDF compression powered by Ghostscript compiled to WebAssembly.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "npm run build:ts && node scripts/copy-runtime.js",
+    "build:ts": "tsc -p tsconfig.json",
+    "clean": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\"",
+    "test": "node test/package.test.js"
+  },
+  "keywords": [
+    "ghostscript",
+    "wasm",
+    "pdf",
+    "compression",
+    "pdfwrite",
+    "webassembly",
+    "browser"
+  ],
+  "license": "AGPL-3.0",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.4"
+  },
+  "dependencies": {
+    "ghostscript-wasm": "file:../.."
+  }
+}

@@ -1,0 +1,46 @@
+const el=id=>document.getElementById(id);let frames=[],profile=null,profileName='',worker=null,busy=false,job=null,profileRead=0,customProfile=null,customName='';
+function status(text){el('status').textContent=text;}
+function refresh(){el('export').disabled=busy||(el('profile-mode').value!=='none'&&!profile)||!frames.length||frames.some(f=>f.type!=='FRAME');el('cancel').hidden=!worker;el('profile').disabled=busy;el('profile-mode').disabled=busy;el('width').disabled=busy;el('height').disabled=busy;el('auto-size').disabled=busy;}
+function stop(){if(worker){worker.terminate();worker=null;}busy=false;job=null;refresh();parent.postMessage({pluginMessage:{type:'ready'}},'*');}
+function updateSize(){
+ const valid=frames.filter(f=>f.type==='FRAME');
+ if(el('auto-size').checked){
+  const sizes=valid.map(f=>PrintCore.frameSize(f.width,f.height));
+  const same=sizes.length && sizes.every(s=>s.width===sizes[0].width && s.height===sizes[0].height);
+  el('width').value=same?sizes[0].width:'';el('height').value=same?sizes[0].height:'';
+  el('width').placeholder=sizes.length?'Varies':'';el('height').placeholder=sizes.length?'Varies':'';
+  el('size-hint').textContent=!sizes.length?'Select frames to infer their print size.':same?'Inferred from the frame at Figma’s native PDF scale.':'Each PDF page uses its own frame’s inferred size. Enter dimensions to override all pages.';
+ }else el('size-hint').textContent='Your dimensions apply to every exported page.';
+}
+el('auto-size').onchange=updateSize;
+for(const id of ['width','height'])el(id).oninput=()=>{el('auto-size').checked=false;updateSize();};
+el('profile').onchange=async event=>{const generation=++profileRead;try{const file=event.target.files[0];profile=null;refresh();if(!file)return;if(file.size>5*1024*1024)throw new Error('ICC profile is too large.');const bytes=new Uint8Array(await file.arrayBuffer());if(generation!==profileRead)return;PrintCore.validateICC(bytes);customProfile=bytes;customName=file.name;profile=bytes;profileName=file.name;status('Ready to export.');}catch(error){if(generation!==profileRead)return;status(error.message);}refresh();};
+el('export').onclick=()=>{try{const width=Number(el('width').value),height=Number(el('height').value);const auto=el('auto-size').checked;const sizes=auto?frames.map(f=>PrintCore.frameSize(f.width,f.height)):null;if(sizes)for(const size of sizes){PrintCore.points(size.width);PrintCore.points(size.height);}else{PrintCore.points(width);PrintCore.points(height);}job={width,height,auto,sizes,icc:profile?profile.slice():null,name:profileName};busy=true;refresh();status('Preparing frames…');parent.postMessage({pluginMessage:{type:'export',ids:frames.map(f=>f.id)}},'*');}catch(error){status(error.message);}};
+el('cancel').onclick=()=>{stop();status('Conversion cancelled.');};
+window.onmessage=async event=>{
+ const msg=event.data.pluginMessage;if(!msg)return;
+ if(msg.type==='selection'){if(busy)return;frames=msg.frames.sort((a,b)=>a.name.localeCompare(b.name,undefined,{numeric:true}));updateSize();el('frames').replaceChildren();for(const frame of frames){const li=document.createElement('li');li.textContent=frame.name+(frame.type==='FRAME'?'':' — select a frame');el('frames').append(li);}refresh();}
+ if(msg.type==='status')status(msg.text);
+ if(msg.type==='error'){stop();status(msg.text);}
+ if(msg.type==='pdfs' && job){const current=job;try{if(current.auto && msg.sizes)current.sizes=msg.sizes.map(size=>PrintCore.frameSize(size.width,size.height));
+  status('Combining pages…');const merged=await PDFLib.PDFDocument.create();for(const bytes of msg.pdfs){const source=await PDFLib.PDFDocument.load(new Uint8Array(bytes));for(const page of await merged.copyPages(source,source.getPageIndices()))merged.addPage(page);}
+  const pdf=await merged.save();if(job!==current)return;status('Converting colors to CMYK…');
+  const url=URL.createObjectURL(new Blob([WORKER_SOURCE],{type:'text/javascript'}));worker=new Worker(url);URL.revokeObjectURL(url);refresh();
+  worker.onerror=event=>{stop();status('Conversion could not start: '+event.message);};
+  worker.onmessage=async event=>{if(job!==current)return;worker.terminate();worker=null;refresh();try{if(event.data.error)throw new Error(event.data.error);status(current.icc?'Setting print size and embedding profile…':'Setting print size…');const output=await PrintCore.finish(event.data.bytes,current.icc,current.width,current.height,current.name,current.sizes);if(job!==current)return;const url=URL.createObjectURL(new Blob([output],{type:'application/pdf'}));const a=document.createElement('a');a.href=url;a.download=current.auto?'Open-Print-frame-size.pdf':'Open-Print-'+current.width+'x'+current.height+'mm.pdf';a.textContent='Save PDF';el('status').replaceChildren(document.createTextNode('Export complete. '),a);a.click();setTimeout(()=>URL.revokeObjectURL(url),60000);stop();}catch(error){stop();status(error.message);}};
+  const wasm=Uint8Array.from(atob(WASM_BASE64),c=>c.charCodeAt(0));worker.postMessage({wasm,pdf,icc:current.icc?current.icc.slice():null},[wasm.buffer,pdf.buffer]);
+ }catch(error){stop();status(error.message);}}
+ };
+function chooseProfile(){
+ ++profileRead;const mode=el('profile-mode').value;
+ el('custom-profile').hidden=mode!=='custom';
+ if(mode==='fogra'){profile=Uint8Array.from(atob(PRESET_ICC_BASE64),c=>c.charCodeAt(0));PrintCore.validateICC(profile);profileName='Coated FOGRA39 (ISO 12647-2:2004)';}
+ else if(mode==='none'){profile=null;profileName='';}
+ else {profile=customProfile;profileName=customName;}
+ el('profile-hint').textContent=mode==='none'?'Exports CMYK using the default conversion. No ICC profile is embedded.':mode==='fogra'?'':'Choose your printer’s CMYK ICC profile. It will be embedded in the PDF.';
+ el('profile-hint').hidden=!el('profile-hint').textContent;
+ status(mode==='custom'&&!profile?'Choose a CMYK profile to begin.':'Ready to export.');refresh();
+}
+if(!PRESET_ICC_BASE64){el('fogra-option').remove();el('profile-mode').value='none';}
+el('profile-mode').onchange=chooseProfile;chooseProfile();
+parent.postMessage({pluginMessage:{type:'ready'}},'*');

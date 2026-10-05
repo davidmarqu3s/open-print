@@ -1,0 +1,42 @@
+# Build artifacts
+/dist/*.js
+/dist/*.wasm
+/dist/*.worker.js
+/dist/*.map
+/build/
+/cache/
+
+# Downloaded source (large; will be downloaded inside the container)
+/src/
+/ghostscript-*/
+/ghostpdl-*/
+*.tar.gz
+*.tar.xz
+*.zip
+
+# Test outputs
+/tests/output/
+/tests/temp/
+/tests/*.log
+
+# Node
+/node_modules/
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# IDE / OS
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Git
+.git/
+.gitignore
+
+# Documentation not needed for the build
+*.md

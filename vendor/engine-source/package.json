@@ -1,0 +1,51 @@
+{
+  "name": "ghostscript-wasm",
+  "version": "10.07.1",
+  "description": "Reproducible WebAssembly build of Ghostscript for browser-based PDF compression.",
+  "type": "module",
+  "main": "dist/ghostscript.js",
+  "module": "dist/ghostscript.js",
+  "files": [
+    "dist/",
+    "worker/",
+    "shared/",
+    "native/",
+    "versions.env",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "download": "bash scripts/download-source.sh",
+    "build": "bash scripts/build.sh",
+    "build:docker": "docker build -t ghostscript-wasm . && docker run --rm -v \"$PWD:/project\" ghostscript-wasm",
+    "clean": "bash scripts/clean.sh",
+    "test": "bash scripts/test.sh",
+    "benchmark": "node scripts/benchmark.js",
+    "sample": "node scripts/sample-compress.js",
+    "serve": "node scripts/serve.js",
+    "build:package": "npm --prefix packages/ghostscript-wasm install && npm --prefix packages/ghostscript-wasm run build",
+    "test:package": "node packages/ghostscript-wasm/test/package.test.js"
+  },
+  "keywords": [
+    "ghostscript",
+    "wasm",
+    "pdf",
+    "compression",
+    "pdfwrite",
+    "webassembly",
+    "browser"
+  ],
+  "author": "",
+  "license": "AGPL-3.0",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "devDependencies": {
+    "rollup-plugin-copy": "^3.5.0",
+    "vite": "^8.2.2"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/J0shua-code/pdf-tools.git"
+  }
+}

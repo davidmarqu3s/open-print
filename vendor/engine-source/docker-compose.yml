@@ -1,0 +1,17 @@
+version: "3.8"
+
+services:
+  ghostscript-wasm:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        EMSCRIPTEN_VERSION: "${EMSCRIPTEN_VERSION:-6.0.7}"
+    image: ghostscript-wasm
+    container_name: ghostscript-wasm-builder
+    volumes:
+      - .:/project
+    environment:
+      - EMSDK=/emsdk
+      - EMSDK_NODE=/emsdk/node/18.20.3_64bit/bin/node
+    command: bash scripts/build.sh

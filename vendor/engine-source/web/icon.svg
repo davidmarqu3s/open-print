@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#10B981" />
+      <stop offset="100%" stop-color="#059669" />
+    </linearGradient>
+    <linearGradient id="cardGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#FFFFFF" />
+      <stop offset="100%" stop-color="#F3F4F6" />
+    </linearGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="12" stdDeviation="16" flood-color="#0F172A" flood-opacity="0.18" />
+    </filter>
+  </defs>
+  
+  <!-- Outer Rounded Square -->
+  <rect x="32" y="32" width="448" height="448" rx="112" fill="url(#bgGrad)" />
+  
+  <!-- Document Card Background -->
+  <g filter="url(#shadow)">
+    <rect x="128" y="112" width="256" height="300" rx="28" fill="url(#cardGrad)" />
+    
+    <!-- Top Fold Accent -->
+    <path d="M 312 112 L 384 184 L 336 184 C 322.7 184 312 173.3 312 160 Z" fill="#D1D5DB" />
+    
+    <!-- PDF Text Lines -->
+    <rect x="168" y="196" width="120" height="20" rx="10" fill="#10B981" />
+    <rect x="168" y="236" width="176" height="16" rx="8" fill="#9CA3AF" />
+    <rect x="168" y="268" width="144" height="16" rx="8" fill="#D1D5DB" />
+    <rect x="168" y="300" width="160" height="16" rx="8" fill="#D1D5DB" />
+    
+    <!-- Fast Offline Spark Icon Badge -->
+    <circle cx="312" cy="340" r="32" fill="#10B981" />
+    <path d="M312 320 L318 334 L332 340 L318 346 L312 360 L306 346 L292 340 L306 334 Z" fill="#FFFFFF" />
+  </g>
+</svg>
