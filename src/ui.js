@@ -59,11 +59,11 @@ function refresh(){const invalid=frames.filter(f=>f.type!=='FRAME'),problem=size
  const current=count&&bleeds.length===count&&shown.length===1&&shown[0]===bleedSetting;
  el('show-bleed').disabled=locked||!count||!!bleedProblem()||current;el('hide-bleed').disabled=locked||!bleeds.length;el('bleed').disabled=locked;
  el('show-bleed').textContent=bleeds.length&&!current?'Update bleed':'Show bleed';
- el('bleed-field').className='field'+(bleedProblem()?' invalid':'');
+ el('bleed-field').className='field plain'+(bleedProblem()?' invalid':'');
  el('bleed-hint').textContent=!count?'':bleedProblem()||(!bleeds.length?'Show bleed adds an editable Bleed layer to the selected frames, holding their background. Drag images past the edge to fill it.':shown.length>1?'Bleed varies between frames: '+shown.map(formatLength).join(', ')+'.':bleeds.length<count?bleeds.length+' of '+count+' frames have '+formatLength(shown[0])+' bleed.':'');
  el('bleed-hint').className='hint'+(bleedProblem()?' error':'');
  el('marks-options').hidden=!marksOn();el('marks').disabled=locked;for(const id of ['mark-offset','mark-length','mark-weight'])el(id).disabled=locked;
- el('marks-error').textContent=marking;el('mark-offset-field').className='field'+(/Offset/.test(marking)?' invalid':'');el('mark-length-field').className='field'+(/Length/.test(marking)?' invalid':'');el('mark-weight-field').className='field'+(/Thickness/.test(marking)?' invalid':'');
+ el('marks-error').textContent=marking;el('mark-offset-field').className='field plain'+(/Offset/.test(marking)?' invalid':'');el('mark-length-field').className='field plain'+(/Length/.test(marking)?' invalid':'');el('mark-weight-field').className='field plain'+(/Thickness/.test(marking)?' invalid':'');
  el('sheet-hint').textContent=sheetHint();el('sheet-hint').hidden=!el('sheet-hint').textContent;}
 function stop(){if(engineAbort){engineAbort.abort();engineAbort=null;}if(worker){worker.terminate();worker=null;}busy=false;job=null;refresh();parent.postMessage({pluginMessage:{type:'ready'}},'*');}
 function updateSize(){
