@@ -45,11 +45,21 @@ input,select,button{font:inherit;letter-spacing:inherit;color:inherit}
 input[type=number]{-moz-appearance:textfield}input::-webkit-outer-spin-button,input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
 .dims{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px}
 .check.below{margin-top:8px}
-select{appearance:none;-webkit-appearance:none;width:100%;height:24px;padding:0 24px 0 8px;border:1px solid transparent;border-radius:5px;background:var(--bg2) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='5' fill='none' stroke='%23888' stroke-width='1.2'%3E%3Cpath d='M.5.5 4 4 7.5.5'/%3E%3C/svg%3E") no-repeat right 8px center;text-overflow:ellipsis;cursor:default}
-select:hover{border-color:var(--border)}
-select:focus{border-color:var(--selected);outline:1px solid var(--selected);outline-offset:-2px}
-select.compact{width:auto;padding:0 20px 0 6px;background-color:transparent;background-position:right 6px center}
-select.compact:hover{background-color:var(--bg2);border-color:transparent}
+select.native{display:none}
+select,.select{appearance:none;-webkit-appearance:none;display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;height:24px;padding:0 8px;border:1px solid transparent;border-radius:5px;background:var(--bg2);font-weight:400;text-align:left;cursor:default}
+.select-label{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.select svg{flex:none;color:var(--icon2)}
+.select:hover:not(:disabled){border-color:var(--border)}
+.select:focus-visible,.select[aria-expanded=true]{border-color:var(--selected);outline:1px solid var(--selected);outline-offset:-2px}
+.select.compact{width:auto;gap:6px;padding:0 6px;background:transparent}
+.select.compact:hover:not(:disabled){background:var(--bg2);border-color:transparent}
+.select.compact:focus-visible,.select.compact[aria-expanded=true]{background:var(--bg2)}
+.menu{position:fixed;z-index:10;box-sizing:border-box;padding:8px;overflow-y:auto;border-radius:13px;background:var(--figma-color-bg-menu,#1e1e1e);color:var(--figma-color-text-menu,#fff);box-shadow:0 0 .5px rgba(0,0,0,.12),0 10px 16px rgba(0,0,0,.12),0 2px 5px rgba(0,0,0,.15);user-select:none;color-scheme:dark}
+.menu-item{display:flex;align-items:center;gap:4px;height:24px;padding:0 8px 0 0;border-radius:5px;white-space:nowrap;cursor:default}
+.menu-item svg,.menu-check{flex:none;width:16px;height:16px;margin-left:4px}
+.menu-item.active{background:var(--figma-color-bg-menu-selected,#0d99ff);color:var(--figma-color-text-menu-selected,#fff)}
+.menu-title{height:24px;padding-left:24px;line-height:24px;color:var(--figma-color-text-menu-tertiary,rgba(255,255,255,.4));white-space:nowrap}
+.menu-divider{height:1px;margin:8px -8px;background:var(--figma-color-border-menu,#383838)}
 .check{display:flex;align-items:center;gap:8px;height:24px;cursor:default;user-select:none}
 .check input{appearance:none;-webkit-appearance:none;flex:none;width:12px;height:12px;margin:0;border:1px solid var(--text);border-radius:2px;background:none;display:grid;place-content:center}
 .check input:checked{border-color:var(--brand);background:var(--brand) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='6' fill='none' stroke='white' stroke-width='1.5'%3E%3Cpath d='M.75 3 3 5.25 7.25.75'/%3E%3C/svg%3E") no-repeat center}
@@ -64,7 +74,7 @@ button:focus-visible,.button:focus-within{outline:2px solid var(--selected);outl
 .file{position:relative;width:100%;height:24px;margin-top:8px;overflow:hidden}
 .file input{position:absolute;inset:0;opacity:0;cursor:default}
 .file input:disabled+span{opacity:.4}
-input:disabled,select:disabled,.check input:disabled+span{opacity:.4}
+input:disabled,.select:disabled,.check input:disabled+span{opacity:.4}
 footer{flex:none;display:flex;flex-direction:column;gap:8px;padding:12px 16px 16px;border-top:1px solid var(--border)}
 .actions{display:flex;gap:8px}
 .actions .primary{flex:1}
@@ -77,6 +87,8 @@ footer{flex:none;display:flex;flex-direction:column;gap:8px;padding:12px 16px 16
 #status.done,#status.queue{color:var(--text)}
 #status .step{margin-left:auto;flex:none;color:var(--text2);font-variant-numeric:tabular-nums}
 #status .again{margin-left:auto;flex:none}
+#status.done:has(.note){flex-wrap:wrap}
+#status .note{flex-basis:100%;color:var(--warning)}
 #status.busy::before{content:"";flex:none;width:12px;height:12px;margin-top:2px;border:1.5px solid var(--border);border-top-color:var(--brand);border-radius:50%;animation:spin .8s linear infinite}
 #status a{margin-left:auto;color:var(--figma-color-text-brand,#007be5);font-weight:500;text-decoration:none}
 #status a:hover{text-decoration:underline}
@@ -96,5 +108,5 @@ footer{flex:none;display:flex;flex-direction:column;gap:8px;padding:12px 16px 16
 <div id="custom-profile" hidden><label class="button secondary file"><input id="profile" type="file" accept=".icc,.icm"><span>Import ICC file…</span></label></div>
 <p class="hint" id="profile-hint"></p></section>
 </main>
-<footer><div class="option" id="export-options" hidden><label for="export-mode">Export as</label><select id="export-mode" class="compact"><option value="combined">One multipage PDF</option><option value="separate">Individual PDFs</option></select></div><div id="status" role="status"></div><div id="export-hint"></div><div class="actions"><button id="cancel" class="secondary" hidden>Cancel</button><button id="export" class="primary" disabled>Export CMYK PDF</button></div></footer>
+<footer><div class="option" id="export-options" hidden><label for="export-mode">Export as</label><select id="export-mode" class="compact" aria-label="Export as"><option value="combined">One multipage PDF</option><option value="separate">Individual PDFs</option></select></div><div id="status" role="status"></div><div id="export-hint"></div><div class="actions"><button id="cancel" class="secondary" hidden>Cancel</button><button id="export" class="primary" disabled>Export CMYK PDF</button></div></footer>
 <script>/*BUNDLE*/</script></body></html>

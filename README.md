@@ -23,7 +23,7 @@ Figma frames contain no intrinsic physical-size metadata. Automatic inference us
 
 For example, a 907 × 1276 frame infers 319.97 × 450.14 mm. Enter 320 × 450 mm if that is your intended final page size. When an inferred size is within 0.5 mm of a standard paper size (A0–A6, SRA3, Letter, Legal, Tabloid or a business card), the plugin offers a one-click **Use A3**-style button that enters the exact size. Editing dimensions disables automatic sizing and applies your size to every page. Manual dimensions persist across selection changes.
 
-Artwork remains at its native size, aligned to the top left. Page resizing changes PDF page boundaries; larger pages add space and smaller pages crop. The plugin does not resize or modify Figma nodes.
+Artwork remains at its native size, aligned to the top left. Page resizing changes PDF page boundaries; larger pages add space and smaller pages crop. The plugin does not resize or modify your Figma nodes. Frames with shadows or blurs are exported from a temporary scaled copy that is deleted immediately (see below).
 
 ## Supported scope
 
@@ -31,7 +31,8 @@ Artwork remains at its native size, aligned to the top left. Page resizing chang
 - Vector paths retained for supported artwork.
 - ICC color conversion, with optional embedded CMYK OutputIntent.
 - Existing raster images remain raster; image downsampling is disabled.
-- Gradients and visible effects are rejected before export. Each one is listed under its frame with a **Show** button that zooms to the layer.
+- Linear, radial, angular and diamond gradients, including gradient text, strokes and gradient opacity, export as vector CMYK gradients. Ghostscript would otherwise rasterise RGB gradients at about 180 ppi and drop mesh gradients (angular, diamond), so each RGB gradient is converted to DeviceCMYK first, using Ghostscript’s own conversion of the same colours on a hidden probe page. Gradients therefore match flat colours under every profile and stay resolution-independent.
+- Drop shadow, inner shadow, layer blur and background blur are supported. Figma’s PDF export bakes these into 144 ppi bitmaps, so frames that use them are exported from a temporary copy scaled by about 2.1× and scaled back down, giving roughly 300 ppi at print size. The copy is removed straight after export. Frames longer than about 1,370 mm on their long edge, or files where Figma refuses the copy (for example view-only files), fall back to a lower resolution and the plugin reports it. Other effect types, such as noise or texture, are still rejected before export; each one is listed under its frame with a **Show** button that zooms to the layer.
 - Crop marks already in the artwork are retained; new bleed or marks are not generated.
 - MediaBox, CropBox, TrimBox and BleedBox all use the final page size.
 - Text exports as vector outlines; editable Illustrator text is not retained. The converter omits hidden font layers and the PDF finishing step removes orphan close-path commands. Simple vector alpha masks use white mask paint for consistent Illustrator import, without changing artwork colours or luminosity masks.
@@ -48,7 +49,7 @@ npm test
 npm run build
 ```
 
-Then import `manifest.json` in Figma desktop. Automated tests cover sizing, CMYK profile validation/embedding, vector content, preflight, export order, no node writes, automatic sizing and persistent manual overrides. A three-page real-design browser test also verified CMYK values, preserved vectors and embedded ICC bytes against a reference export. Sample artwork is not included. The 15 requested ICC profiles are included in this private repository.
+Then import `manifest.json` in Figma desktop. Automated tests cover sizing, CMYK profile validation/embedding, vector content, vector CMYK gradients from captured Figma export structures, scaled effect export, preflight, export order, no writes to original nodes, automatic sizing and persistent manual overrides. A three-page real-design browser test also verified CMYK values, preserved vectors and embedded ICC bytes against a reference export. Sample artwork is not included. The 15 requested ICC profiles are included in this private repository.
 
 ## Color profiles
 

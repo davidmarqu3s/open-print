@@ -24,7 +24,7 @@ function nameNode(text){
  const name=document.createElement('span'),start=document.createElement('span'),end=document.createElement('span'),chars=[...text],cut=tailStart(chars);
  name.className='name';name.title=text;start.className='start';end.className='end';start.textContent=chars.slice(0,cut).join('');end.textContent=chars.slice(cut).join('');name.append(start,end);return name;
 }
-const ISSUE_LABELS={gradient:'Gradient',effect:'Effect'},ISSUES_PER_FRAME=3;
+const ISSUE_LABELS={effect:'Unsupported effect'},ISSUES_PER_FRAME=3;
 function renderIssues(frame){
  const own=issues.filter(issue=>issue.frameId===frame.id);
  for(const issue of own.slice(0,ISSUES_PER_FRAME)){
@@ -80,14 +80,22 @@ window.onmessage=async event=>{
   const key=JSON.stringify(frames.map(f=>[f.id,f.name,f.type,f.width,f.height]));if(key!==selectionKey){selectionKey=key;clearResult();}
   updateSize();renderFrames();refresh();}
  if(msg.type==='status')status(msg.text,'busy');
- if(msg.type==='error'){stop();if(Array.isArray(msg.issues)&&msg.issues.length){issues=msg.issues;renderFrames();const layers=new Set(issues.map(i=>i.nodeId)).size;status((layers===1?'1 layer uses':layers+' layers use')+' a gradient or effect, listed under its frame above. Remove or flatten them, then export again.','error');}else status(msg.text,'error');}
+ if(msg.type==='error'){stop();if(Array.isArray(msg.issues)&&msg.issues.length){issues=msg.issues;renderFrames();const layers=new Set(issues.map(i=>i.nodeId)).size;status((layers===1?'1 layer uses':layers+' layers use')+' an unsupported effect, listed under its frame above. Remove the effect or flatten the layer, then export again.','error');}else status(msg.text,'error');}
  if(msg.type==='pdfs' && job){const current=job;try{if(current.auto && msg.sizes)current.sizes=msg.sizes.map(size=>PrintCore.frameSize(size.width,size.height));
-  status('Combining pages…','busy');const merged=await PDFLib.PDFDocument.create();for(const bytes of msg.pdfs){const source=await PDFLib.PDFDocument.load(new Uint8Array(bytes));for(const page of await merged.copyPages(source,source.getPageIndices()))merged.addPage(page);}
-  const pdf=await merged.save();if(job!==current)return;status('Loading conversion engine…','busy');const downloadAbort=new AbortController();engineAbort=downloadAbort;refresh();const downloadTimer=setTimeout(()=>downloadAbort.abort(),60000);let wasm;try{wasm=await OpenPrintAssets.loadEngine(downloadAbort.signal,fraction=>{if(job===current)status('Downloading engine… '+Math.floor(fraction*100)+'%','busy');});}finally{clearTimeout(downloadTimer);}if(job!==current)return;engineAbort=null;status('Converting colors to CMYK…','busy');
-  const url=URL.createObjectURL(new Blob([WORKER_SOURCE],{type:'text/javascript'}));worker=new Worker(url);URL.revokeObjectURL(url);refresh();
-  worker.onerror=event=>{stop();status('Conversion could not start: '+event.message,'error');};
-  worker.onmessage=async event=>{if(job!==current)return;worker.terminate();worker=null;refresh();try{if(event.data.error)throw new Error(event.data.error);status(current.icc?'Setting print size and embedding profile…':'Setting print size…','busy');const outputs=await prepareDownloads(event.data.bytes,current);if(job!==current)return;stop();showDownloads(outputs,current.separate);}catch(error){stop();status(error.message,'error');}};
-  worker.postMessage({wasm,pdf,icc:current.icc?current.icc.slice():null},[wasm.buffer,pdf.buffer]);
+  status('Combining pages…','busy');const merged=await PDFLib.PDFDocument.create();
+  for(let i=0;i<msg.pdfs.length;i++){const source=await PDFLib.PDFDocument.load(new Uint8Array(msg.pdfs[i])),scale=msg.scales&&msg.scales[i]||1;for(const page of await merged.copyPages(source,source.getPageIndices())){if(scale!==1)page.scale(1/scale,1/scale);merged.addPage(page);}}
+  if(job!==current)return;status('Loading conversion engine…','busy');const downloadAbort=new AbortController();engineAbort=downloadAbort;refresh();const downloadTimer=setTimeout(()=>downloadAbort.abort(),60000);let wasm;try{wasm=await OpenPrintAssets.loadEngine(downloadAbort.signal,fraction=>{if(job===current)status('Downloading engine… '+Math.floor(fraction*100)+'%','busy');});}finally{clearTimeout(downloadTimer);}if(job!==current)return;engineAbort=null;
+  const convert=bytes=>new Promise((resolve,reject)=>{
+   const url=URL.createObjectURL(new Blob([WORKER_SOURCE],{type:'text/javascript'})),w=new Worker(url);URL.revokeObjectURL(url);worker=w;refresh();const engine=wasm.slice();
+   w.onerror=event=>reject(new Error('Conversion could not start: '+event.message));
+   w.onmessage=event=>{w.terminate();if(worker===w)worker=null;refresh();if(event.data.error)reject(new Error(event.data.error));else resolve(event.data.bytes);};
+   w.postMessage({wasm:engine,pdf:bytes,icc:current.icc?current.icc.slice():null},[engine.buffer,bytes.buffer]);
+  });
+  status('Converting colors to CMYK…','busy');
+  await PrintShading.toCMYK(merged,async bytes=>{const output=await convert(bytes);if(job!==current)throw new Error('Conversion cancelled.');return output;});
+  if(job!==current)return;const converted=await convert(await merged.save());if(job!==current)return;
+  status(current.icc?'Setting print size and embedding profile…':'Setting print size…','busy');const outputs=await prepareDownloads(converted,current);if(job!==current)return;stop();showDownloads(outputs,current.separate);
+  if(msg.effectPpi&&msg.effectPpi<300){const note=document.createElement('span');note.className='note';note.textContent='Shadows and blurs are '+msg.effectPpi+' ppi, below the 300 ppi print target.';el('status').append(note);}
  }catch(error){if(job!==current)return;stop();status(error.message,'error');}}
  };
 function packageDownloads(outputs){

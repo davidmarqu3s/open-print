@@ -124,10 +124,10 @@ test('an old error is cleared when the selection changes so the current blocker 
 });
 test('preflight issues are listed under their frame with a way to show each layer',async()=>{
  const h=ui();await select(h,[frame('1',595,842),frame('2',595,842)]);
- await send(h,{type:'error',text:'Gradient in Fill',issues:[{kind:'gradient',text:'Gradient in Fill',frameId:'2',nodeId:'9',name:'Fill'}]});
- const rows=h.el('frames').children;assert.equal(rows.length,3);assert.equal(rows[2].className,'issue');assert.match(rows[2].textContent,/Gradient · Fill/);
+ await send(h,{type:'error',text:'Unsupported effect in Fill',issues:[{kind:'effect',text:'Unsupported effect in Fill',frameId:'2',nodeId:'9',name:'Fill'}]});
+ const rows=h.el('frames').children;assert.equal(rows.length,3);assert.equal(rows[2].className,'issue');assert.match(rows[2].textContent,/Unsupported effect · Fill/);
  rows[2].children[1].onclick();assert.equal(h.messages.at(-1).type,'show-layer');assert.equal(h.messages.at(-1).id,'9');
- assert.match(h.el('status').textContent,/1 layer uses a gradient or effect/);
+ assert.match(h.el('status').textContent,/1 layer uses an unsupported effect/);
  await select(h,[frame('1',595,842)]);assert.equal(h.el('frames').children.length,1);
 });
 test('frame names truncate in the middle and keep their full name as a tooltip',async()=>{
