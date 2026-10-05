@@ -1,5 +1,5 @@
 const el=id=>document.getElementById(id);let frames=[],profile=null,profileName='',worker=null,busy=false,job=null,profileRead=0,customProfile=null,customName='',engineAbort=null;
-let unit='mm',dimensions={width:null,height:null},downloadUrls=[],downloadQueue=null,issues=[],selectionKey='';
+let unit='mm',dimensions={width:null,height:null},bleedSetting=3,marks={offset:3,length:5,weight:0.25},downloadUrls=[],downloadQueue=null,issues=[],selectionKey='';
 const displayDimension=value=>value===null?'':unit==='in'?Math.round(value/25.4*1e6)/1e6:value;
 const profiles={...BUNDLED_PROFILES};
 const decodeProfile=OpenPrintAssets.decodeProfile;
@@ -17,6 +17,21 @@ function status(text,tone=''){
 function clearResult(){if(busy||downloadQueue)return;issues=[];if(el('status').className!=='busy')status('');}
 const FRAME_ICON='<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M5.5 2v2.5H3v1h2.5v5H3v1h2.5V14h1v-2.5h5V14h1v-2.5H15v-1h-2.5v-5H15v-1h-2.5V2h-1v2.5h-5V2zm1 3.5h5v5h-5z"/></svg>',WARNING_ICON='<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 2.5 14 13H2zm-.5 4v3h1v-3zm0 4v1h1v-1z"/></svg>';
 const formatSize=size=>{const value=mm=>unit==='in'?Math.round(mm/25.4*100)/100:mm;return value(size.width)+' × '+value(size.height)+' '+unit;};
+// Bleed arrives from the canvas in frame units, 72 to the inch.
+const frameBleed=frame=>frame.type==='FRAME'&&frame.bleed>0?Math.round(frame.bleed*25.4/72*100)/100:0;
+const formatLength=mm=>(unit==='in'?Math.round(mm/25.4*1000)/1000:mm)+' '+unit;
+const marksOn=()=>el('marks').checked;
+function marksProblem(){return marksOn()?PrintCore.marksProblem(marks,Math.max(0,...frames.map(frameBleed))):'';}
+function bleedProblem(){return Number.isFinite(bleedSetting)&&bleedSetting>0&&bleedSetting<=20?'':'Enter a bleed between 0 and 20 mm.';}
+function showLengths(){el('bleed').value=displayDimension(bleedSetting);el('mark-offset').value=displayDimension(marks.offset);el('mark-length').value=displayDimension(marks.length);el('mark-weight').value=marks.weight;for(const id of ['bleed','mark-offset','mark-length']){el(id).step=unit==='in'?'.01':'.5';}}
+// The finished sheet: trim plus the bleed, or plus the marks' offset and length.
+function sheetHint(){
+ const valid=frames.filter(f=>f.type==='FRAME'),bleeds=[...new Set(valid.map(frameBleed))];
+ if(!valid.length||(!marksOn()&&bleeds.every(b=>!b)))return '';
+ if(dimensions.width===null||dimensions.height===null||bleeds.length>1||marksProblem())return '';
+ const margin=PrintCore.margin(bleeds[0],marksOn()?marks:null),round=v=>Math.round(v*100)/100;
+ return 'PDF page '+formatSize({width:round(dimensions.width+2*margin),height:round(dimensions.height+2*margin)})+(marksOn()?' with crop marks.':' with bleed.');
+}
 // Truncate in the middle so names that share a long prefix stay distinguishable. The kept end starts at a word.
 const NAME_TAIL=14;
 function tailStart(chars){if(chars.length<=NAME_TAIL+6)return chars.length;const start=chars.length-NAME_TAIL,space=chars.indexOf(' ',start);return space>=0&&space<chars.length-1?space:start;}
@@ -34,12 +49,22 @@ function renderIssues(frame){
  }
  if(own.length>ISSUES_PER_FRAME){const li=document.createElement('li');li.className='issue more';li.textContent='+'+(own.length-ISSUES_PER_FRAME)+' more in this frame';el('frames').append(li);}
 }
-function renderFrames(){el('frames').replaceChildren();el('frames').className=issues.length?'expanded':'';if(!frames.length){const li=document.createElement('li');li.className='empty';li.textContent='Select one or more frames on the canvas.';el('frames').append(li);}for(const frame of frames){const valid=frame.type==='FRAME',li=document.createElement('li'),size=document.createElement('span');li.className=valid?'':'invalid';li.innerHTML=valid?FRAME_ICON:WARNING_ICON;size.className='size';size.textContent=valid?formatSize(PrintCore.frameSize(frame.width,frame.height)):'Not a frame';li.append(nameNode(frame.name),size);el('frames').append(li);renderIssues(frame);}}
+function renderFrames(){el('frames').replaceChildren();el('frames').className=issues.length?'expanded':'';if(!frames.length){const li=document.createElement('li');li.className='empty';li.textContent='Select one or more frames on the canvas.';el('frames').append(li);}for(const frame of frames){const valid=frame.type==='FRAME',li=document.createElement('li'),size=document.createElement('span');li.className=valid?'':'invalid';li.innerHTML=valid?FRAME_ICON:WARNING_ICON;size.className='size';size.textContent=valid?formatSize(PrintCore.frameSize(frame.width,frame.height))+(frameBleed(frame)?' + '+formatLength(frameBleed(frame)):''):'Not a frame';size.title=frameBleed(frame)?'Bleed '+formatLength(frameBleed(frame))+' on each side':'';li.append(nameNode(frame.name),size);el('frames').append(li);renderIssues(frame);}}
 function sizeProblem(){if(el('auto-size').checked)return '';if(dimensions.width===null||dimensions.height===null)return 'Enter a width and height.';try{PrintCore.points(dimensions.width);PrintCore.points(dimensions.height);return '';}catch(error){return error.message;}}
 function fieldInvalid(id){if(el('auto-size').checked||dimensions[id]===null)return false;try{PrintCore.points(dimensions[id]);return false;}catch(error){return true;}}
 function profileProblem(){if(el('profile-mode').value==='none'||profile)return '';const entry=PROFILE_CATALOG.find(p=>p.id===el('profile-mode').value);return entry?'Import '+entry.name+' to export.':'Choose a CMYK profile to export.';}
-function refresh(){const invalid=frames.filter(f=>f.type!=='FRAME'),problem=sizeProblem(),count=frames.length-invalid.length,separate=el('export-mode').value==='separate';el('export').disabled=busy||!!downloadQueue||!!profileProblem()||!frames.length||invalid.length>0||!!problem;el('export').textContent=busy?'Exporting…':count<2?'Export CMYK PDF':separate?'Export '+count+' CMYK PDFs':'Export '+count+'-page CMYK PDF';el('export-hint').textContent=busy?'':!frames.length?'Select frames to export.':invalid.length?'Only frames can be exported. Deselect '+(invalid.length===1?'“'+invalid[0].name+'”':invalid.length+' layers')+'.':problem?'':profileProblem();
- const widthInvalid=fieldInvalid('width'),heightInvalid=fieldInvalid('height');el('width-field').className='field'+(widthInvalid?' invalid':'');el('height-field').className='field'+(heightInvalid?' invalid':'');el('size-error').textContent=problem;el('size-error').className='hint'+(widthInvalid||heightInvalid?' error':'');el('size-snap').disabled=busy||!!downloadQueue;el('frame-count').textContent=!frames.length?'':invalid.length?frames.length+' selected':frames.length+(frames.length===1?' page':' pages');el('cancel').hidden=!busy;el('cancel').textContent='Cancel';el('profile').disabled=busy||!!downloadQueue;el('profile-mode').disabled=busy||!!downloadQueue;el('width').disabled=busy||!!downloadQueue;el('height').disabled=busy||!!downloadQueue;el('auto-size').disabled=busy||!!downloadQueue;el('units').disabled=busy||!!downloadQueue;el('export-options').hidden=count<2;el('export-mode').disabled=busy||!!downloadQueue;}
+function refresh(){const invalid=frames.filter(f=>f.type!=='FRAME'),problem=sizeProblem(),count=frames.length-invalid.length,separate=el('export-mode').value==='separate';const marking=marksProblem();el('export').disabled=busy||!!downloadQueue||!!profileProblem()||!frames.length||invalid.length>0||!!problem||!!marking;el('export').textContent=busy?'Exporting…':count<2?'Export CMYK PDF':separate?'Export '+count+' CMYK PDFs':'Export '+count+'-page CMYK PDF';el('export-hint').textContent=busy?'':!frames.length?'Select frames to export.':invalid.length?'Only frames can be exported. Deselect '+(invalid.length===1?'“'+invalid[0].name+'”':invalid.length+' layers')+'.':problem||marking?'':profileProblem();
+ const widthInvalid=fieldInvalid('width'),heightInvalid=fieldInvalid('height');el('width-field').className='field'+(widthInvalid?' invalid':'');el('height-field').className='field'+(heightInvalid?' invalid':'');el('size-error').textContent=problem;el('size-error').className='hint'+(widthInvalid||heightInvalid?' error':'');el('size-snap').disabled=busy||!!downloadQueue;el('frame-count').textContent=!frames.length?'':invalid.length?frames.length+' selected':frames.length+(frames.length===1?' page':' pages');el('cancel').hidden=!busy;el('cancel').textContent='Cancel';el('profile').disabled=busy||!!downloadQueue;el('profile-mode').disabled=busy||!!downloadQueue;el('width').disabled=busy||!!downloadQueue;el('height').disabled=busy||!!downloadQueue;el('auto-size').disabled=busy||!!downloadQueue;el('units').disabled=busy||!!downloadQueue;el('export-options').hidden=count<2;el('export-mode').disabled=busy||!!downloadQueue;
+ const locked=busy||!!downloadQueue,bleeds=frames.map(frameBleed).filter(b=>b),shown=[...new Set(bleeds)];
+ const current=count&&bleeds.length===count&&shown.length===1&&shown[0]===bleedSetting;
+ el('show-bleed').disabled=locked||!count||!!bleedProblem()||current;el('hide-bleed').disabled=locked||!bleeds.length;el('bleed').disabled=locked;
+ el('show-bleed').textContent=bleeds.length&&!current?'Update bleed':'Show bleed';
+ el('bleed-field').className='field'+(bleedProblem()?' invalid':'');
+ el('bleed-hint').textContent=!count?'':bleedProblem()||(!bleeds.length?'Show bleed adds an editable Bleed layer to the selected frames, holding their background. Drag images past the edge to fill it.':shown.length>1?'Bleed varies between frames: '+shown.map(formatLength).join(', ')+'.':bleeds.length<count?bleeds.length+' of '+count+' frames have '+formatLength(shown[0])+' bleed.':'');
+ el('bleed-hint').className='hint'+(bleedProblem()?' error':'');
+ el('marks-options').hidden=!marksOn();el('marks').disabled=locked;for(const id of ['mark-offset','mark-length','mark-weight'])el(id).disabled=locked;
+ el('marks-error').textContent=marking;el('mark-offset-field').className='field'+(/Offset/.test(marking)?' invalid':'');el('mark-length-field').className='field'+(/Length/.test(marking)?' invalid':'');el('mark-weight-field').className='field'+(/Thickness/.test(marking)?' invalid':'');
+ el('sheet-hint').textContent=sheetHint();el('sheet-hint').hidden=!el('sheet-hint').textContent;}
 function stop(){if(engineAbort){engineAbort.abort();engineAbort=null;}if(worker){worker.terminate();worker=null;}busy=false;job=null;refresh();parent.postMessage({pluginMessage:{type:'ready'}},'*');}
 function updateSize(){
  const valid=frames.filter(f=>f.type==='FRAME');
@@ -65,11 +90,20 @@ function showPaperMatch(match){
 }
 el('export-mode').value='combined';el('export-mode').onchange=()=>{clearResult();refresh();};
 el('units').value='mm';
-el('units').onchange=()=>{clearResult();unit=el('units').value;for(const id of ['width','height']){el(id+'-unit').textContent=unit;el(id).min=unit==='in'?10/25.4:10;el(id).max=unit==='in'?2000/25.4:2000;el(id).step=unit==='in'?'.001':'.01';el(id).value=displayDimension(dimensions[id]);}updateSize();renderFrames();};
+el('units').onchange=()=>{clearResult();unit=el('units').value;for(const id of ['width','height']){el(id+'-unit').textContent=unit;el(id).min=unit==='in'?10/25.4:10;el(id).max=unit==='in'?2000/25.4:2000;el(id).step=unit==='in'?'.001':'.01';el(id).value=displayDimension(dimensions[id]);}for(const node of document.querySelectorAll?document.querySelectorAll('.length-unit'):[])node.textContent=unit;showLengths();updateSize();renderFrames();};
 el('auto-size').onchange=()=>{clearResult();updateSize();};
+const readLength=id=>el(id).value===''?NaN:Number(el(id).value)*(unit==='in'?25.4:1);
+el('bleed').oninput=()=>{bleedSetting=readLength('bleed');refresh();};
+el('mark-offset').oninput=()=>{marks.offset=readLength('mark-offset');clearResult();refresh();};
+el('mark-length').oninput=()=>{marks.length=readLength('mark-length');clearResult();refresh();};
+el('mark-weight').oninput=()=>{marks.weight=el('mark-weight').value===''?NaN:Number(el('mark-weight').value);clearResult();refresh();};
+el('marks').onchange=()=>{clearResult();refresh();};
+el('show-bleed').onclick=()=>{if(bleedProblem())return;parent.postMessage({pluginMessage:{type:'show-bleed',ids:frames.filter(f=>f.type==='FRAME').map(f=>f.id),bleed:bleedSetting*72/25.4}},'*');};
+el('hide-bleed').onclick=()=>parent.postMessage({pluginMessage:{type:'hide-bleed',ids:frames.filter(f=>f.type==='FRAME').map(f=>f.id)}},'*');
+showLengths();
 for(const id of ['width','height'])el(id).oninput=()=>{dimensions[id]=el(id).value===''?null:Number(el(id).value)*(unit==='in'?25.4:1);el('auto-size').checked=false;clearResult();updateSize();};
 el('profile').onchange=async event=>{const generation=++profileRead;const mode=el('profile-mode').value;try{const file=event.target.files[0];if(!file)return;profile=null;refresh();if(file.size>5*1024*1024)throw new Error('ICC profile is too large.');const bytes=new Uint8Array(await file.arrayBuffer());if(generation!==profileRead)return;PrintCore.validateICC(bytes);const name=PrintCore.profileDescription(bytes);const entry=PROFILE_CATALOG.find(p=>p.id===mode);if(entry && name!==entry.name)throw new Error('Choose '+entry.name+'. This file contains '+(name||'an unnamed profile')+'.');if(entry){const encoded=encodeProfile(bytes);profiles[mode]=encoded;parent.postMessage({pluginMessage:{type:'save-profile',id:mode,encoded}},'*');}else{customProfile=bytes;customName=name||file.name;}chooseProfile();}catch(error){if(generation!==profileRead)return;status(error.message,'error');}refresh();};
-el('export').onclick=()=>{try{const width=dimensions.width,height=dimensions.height;const auto=el('auto-size').checked;const sizes=auto?frames.map(f=>PrintCore.frameSize(f.width,f.height)):null;if(sizes)for(const size of sizes){PrintCore.points(size.width);PrintCore.points(size.height);}else{PrintCore.points(width);PrintCore.points(height);}stopDownloadQueue();for(const url of downloadUrls)URL.revokeObjectURL(url);downloadUrls=[];job={individual:frames.length>1&&el('export-mode').value!=='combined',filenames:frames.map(f=>f.name+'.pdf'),filename:frames[0].name+'.pdf',width,height,auto,sizes,unit,displayWidth:el('width').value,displayHeight:el('height').value,icc:profile?profile.slice():null,name:profileName};busy=true;refresh();status('Preparing frames…','busy');parent.postMessage({pluginMessage:{type:'export',ids:frames.map(f=>f.id)}},'*');}catch(error){status(error.message,'error');}};
+el('export').onclick=()=>{try{const width=dimensions.width,height=dimensions.height;const auto=el('auto-size').checked;const sizes=auto?frames.map(f=>PrintCore.frameSize(f.width,f.height)):null;if(sizes)for(const size of sizes){PrintCore.points(size.width);PrintCore.points(size.height);}else{PrintCore.points(width);PrintCore.points(height);}stopDownloadQueue();for(const url of downloadUrls)URL.revokeObjectURL(url);downloadUrls=[];job={individual:frames.length>1&&el('export-mode').value!=='combined',filenames:frames.map(f=>f.name+'.pdf'),filename:frames[0].name+'.pdf',width,height,auto,sizes,unit,displayWidth:el('width').value,displayHeight:el('height').value,icc:profile?profile.slice():null,name:profileName,marks:marksOn()?{...marks}:null};busy=true;refresh();status('Preparing frames…','busy');parent.postMessage({pluginMessage:{type:'export',ids:frames.map(f=>f.id)}},'*');}catch(error){status(error.message,'error');}};
 el('cancel').onclick=()=>{parent.postMessage({pluginMessage:{type:'cancel'}},'*');stop();status('Export cancelled.');};
 window.onmessage=async event=>{
  const msg=event.data.pluginMessage;if(!msg)return;
@@ -77,11 +111,11 @@ window.onmessage=async event=>{
  if(msg.type==='profile-storage-error')status('Profile imported for this session. Figma could not save it for next time.','error');
  if(msg.type==='selection'){if(busy||downloadQueue)return;frames=msg.frames.sort((a,b)=>a.name.localeCompare(b.name,undefined,{numeric:true}));
   // The plugin re-sends the selection after every export; only a real change clears the result.
-  const key=JSON.stringify(frames.map(f=>[f.id,f.name,f.type,f.width,f.height]));if(key!==selectionKey){selectionKey=key;clearResult();}
+  const key=JSON.stringify(frames.map(f=>[f.id,f.name,f.type,f.width,f.height,f.bleed]));if(key!==selectionKey){selectionKey=key;clearResult();}
   updateSize();renderFrames();refresh();}
  if(msg.type==='status')status(msg.text,'busy');
  if(msg.type==='error'){stop();if(Array.isArray(msg.issues)&&msg.issues.length){issues=msg.issues;renderFrames();const layers=new Set(issues.map(i=>i.nodeId)).size;status((layers===1?'1 layer uses':layers+' layers use')+' an unsupported effect, listed under its frame above. Remove the effect or flatten the layer, then export again.','error');}else status(msg.text,'error');}
- if(msg.type==='pdfs' && job){const current=job;try{if(current.auto && msg.sizes)current.sizes=msg.sizes.map(size=>PrintCore.frameSize(size.width,size.height));
+ if(msg.type==='pdfs' && job){const current=job;try{current.bleeds=(msg.bleeds||[]).map(px=>px*25.4/72);if(current.auto && msg.sizes)current.sizes=msg.sizes.map(size=>PrintCore.frameSize(size.width,size.height));
   status('Combining pages…','busy');const merged=await PDFLib.PDFDocument.create();
   for(let i=0;i<msg.pdfs.length;i++){const source=await PDFLib.PDFDocument.load(new Uint8Array(msg.pdfs[i])),scale=msg.scales&&msg.scales[i]||1;for(const page of await merged.copyPages(source,source.getPageIndices())){if(scale!==1)page.scale(1/scale,1/scale);merged.addPage(page);}}
   if(job!==current)return;status('Loading conversion engine…','busy');const downloadAbort=new AbortController();engineAbort=downloadAbort;refresh();const downloadTimer=setTimeout(()=>downloadAbort.abort(),60000);let wasm;try{wasm=await OpenPrintAssets.loadEngine(downloadAbort.signal,fraction=>{if(job===current)status('Downloading engine… '+Math.floor(fraction*100)+'%','busy');});}finally{clearTimeout(downloadTimer);}if(job!==current)return;engineAbort=null;
@@ -151,14 +185,14 @@ function showDownloads(outputs){
  a.click();return [a];
 }
 async function prepareDownloads(bytes,current){
- if(!current.individual)return [{filename:current.filename,bytes:await PrintCore.finish(bytes,current.icc,current.width,current.height,current.name,current.sizes)}];
+ if(!current.individual)return [{filename:current.filename,bytes:await PrintCore.finish(bytes,current.icc,current.width,current.height,current.name,current.sizes,{bleeds:current.bleeds,marks:current.marks})}];
  const converted=await PDFLib.PDFDocument.load(bytes);
  if(converted.getPageCount()!==current.filenames.length)throw new Error('The exported page count does not match the selected frames. Please try again.');
  const outputs=[];
  for(let i=0;i<converted.getPageCount();i++){
   const single=await PDFLib.PDFDocument.create();const [page]=await single.copyPages(converted,[i]);single.addPage(page);
   const sizes=current.auto?[current.sizes[i]]:null;
-  outputs.push({filename:current.filenames[i],bytes:await PrintCore.finish(await single.save(),current.icc,current.width,current.height,current.name,sizes)});
+  outputs.push({filename:current.filenames[i],bytes:await PrintCore.finish(await single.save(),current.icc,current.width,current.height,current.name,sizes,{bleeds:current.bleeds?[current.bleeds[i]]:[],marks:current.marks})});
  }
  return outputs;
 }
