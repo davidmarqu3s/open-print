@@ -46,7 +46,8 @@ async function swapForImage(original,copy,topLevel,state) {
 const RETRIES=10,RETRY_MS=300;
 function hasImages(pdf,expected) {
  if(!expected.length)return true;
- let text='';for(let i=0;i<pdf.length;i+=65536)text+=String.fromCharCode.apply(null,pdf.subarray(i,i+65536));
+ let text='';// Figma's sandbox allows at most 65,534 arguments per call, so read the bytes in small chunks.
+ for(let i=0;i<pdf.length;i+=8192)text+=String.fromCharCode.apply(null,pdf.subarray(i,i+8192));
  const found=(text.match(/<<[^<>]*\/Subtype\s*\/Image[^<>]*>>/g)||[]).map(d=>[Number((d.match(/\/Width\s+(\d+)/)||[])[1]),Number((d.match(/\/Height\s+(\d+)/)||[])[1])]);
  // Matching the aspect ratio still passes if Figma resamples the image.
  return expected.every(size=>found.some(([w,h])=>w&&h&&Math.abs(w/h-size.width/size.height)<0.01*size.width/size.height));
