@@ -1,20 +1,24 @@
 const fflate=require('../vendor/fflate.min.js');
 const {test}=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');const PDFLib=require('../vendor/pdf-lib.min.js');
 function ui(bundled={}){
- const elements={},clicks=[],blobs=new Map();let nextURL=0;
+ const elements={},clicks=[],blobs=new Map(),listeners=new Map(),timers=new Map(),revocations=[];let nextURL=0,nextTimer=0,now=0,focused=true;
+ const emit=type=>{focused=type==='focus';for(const fn of [...(listeners.get(type)||[])])fn({type});};
+ const runTimers=delay=>{const end=now+delay;for(;;){const next=[...timers].filter(([,t])=>t.at<=end).sort((a,b)=>a[1].at-b[1].at)[0];if(!next)break;timers.delete(next[0]);now=next[1].at;next[1].fn();}now=end;};
  const make=tag=>({tag,children:[],value:'',groups:[],options:[],checked:false,
+  get textContent(){return this.children.length?this.children.map(child=>child.textContent||'').join(''):this.text||'';},
+  set textContent(value){this.text=value;for(const child of this.children)child.parentNode=null;this.children=[];},
   get isConnected(){return !!this.root||!!(this.parentNode&&this.parentNode.isConnected);},
   remove(){if(this.parentNode)this.parentNode.children=this.parentNode.children.filter(child=>child!==this);this.parentNode=null;},
   replaceChildren(...items){for(const child of this.children)child.parentNode=null;this.children=[];this.append(...items);},
   append(...items){for(const item of items){item.parentNode=this;this.children.push(item);if(item.label)this.groups.push(item);else this.options.push(item);}},
-  click(){clicks.push({element:this,attached:this.isConnected,filename:this.download,href:this.href});}
+  click(){if(this.onclick)this.onclick({isTrusted:false,preventDefault(){}});clicks.push({element:this,attached:this.isConnected,filename:this.download,href:this.href});}
  });
  const el=id=>elements[id]||(elements[id]=Object.assign(make('div'),{root:true,checked:id==='auto-size'}));
- const window={},messages=[];
- const context={fflate,window,document:{getElementById:el,createElement:make,createTextNode:text=>({textContent:text})},parent:{postMessage:x=>messages.push(x.pluginMessage)},PROFILE_CATALOG:JSON.parse(fs.readFileSync('src/profiles.json')),BUNDLED_PROFILES:bundled,OpenPrintAssets:{decodeProfile:encoded=>Uint8Array.from(atob(encoded),c=>c.charCodeAt(0))},atob,btoa,Uint8Array,DataView,Number,Error,TextEncoder,TextDecoder,Blob,URL:{createObjectURL:blob=>{const url='blob:test-'+(++nextURL);blobs.set(url,blob);return url;},revokeObjectURL:url=>blobs.delete(url)}};
+ const window={addEventListener(type,fn){if(!listeners.has(type))listeners.set(type,new Set());listeners.get(type).add(fn);},removeEventListener(type,fn){listeners.get(type)?.delete(fn);}},messages=[];
+ const context={fflate,window,setTimeout:(fn,delay)=>{const id=++nextTimer;timers.set(id,{fn,at:now+delay});return id;},clearTimeout:id=>timers.delete(id),document:{hasFocus:()=>focused,getElementById:el,createElement:make,createTextNode:text=>({textContent:text})},parent:{postMessage:x=>messages.push(x.pluginMessage)},PROFILE_CATALOG:JSON.parse(fs.readFileSync('src/profiles.json')),BUNDLED_PROFILES:bundled,OpenPrintAssets:{decodeProfile:encoded=>Uint8Array.from(atob(encoded),c=>c.charCodeAt(0))},atob,btoa,Uint8Array,DataView,Number,Error,TextEncoder,TextDecoder,Blob,URL:{createObjectURL:blob=>{const url='blob:test-'+(++nextURL);blobs.set(url,blob);return url;},revokeObjectURL:url=>{revocations.push({url,listeners:[...listeners.values()].reduce((n,set)=>n+set.size,0),timers:timers.size});blobs.delete(url);}}};
  vm.createContext(context);
  vm.runInContext(fs.readFileSync('vendor/pdf-lib.min.js','utf8'),context);vm.runInContext(fs.readFileSync('src/core.js','utf8'),context);vm.runInContext(fs.readFileSync('src/ui.js','utf8'),context);
- return {window,el,messages,context,clicks,blobs};
+ return {window,el,messages,context,clicks,blobs,emit,runTimers,timers,listeners,revocations};
 }
 const frame=(id,width,height)=>({id,name:'Sheet '+id,type:'FRAME',width,height});
 test('manual dimensions stay selected when frames change',async()=>{const {window,el}=ui();await window.onmessage({data:{pluginMessage:{type:'selection',frames:[frame('1',907,1276)]}}});el('width').value='320';el('width').oninput();el('height').value='450';el('height').oninput();await window.onmessage({data:{pluginMessage:{type:'selection',frames:[frame('2',595,842)]}}});assert.equal(el('auto-size').checked,false);assert.equal(el('width').value,'320');assert.equal(el('height').value,'450');});
@@ -32,8 +36,8 @@ test('non-frame selection explains why export is blocked',async()=>{const {windo
 test('incomplete manual size blocks export until both dimensions are valid',async()=>{const {window,el}=ui();await window.onmessage({data:{pluginMessage:{type:'selection',frames:[frame('1',907,1276),frame('2',595,842)]}}});assert.equal(el('export').disabled,false);el('width').value='320';el('width').oninput();assert.equal(el('export').disabled,true);assert.match(el('export-hint').textContent,/width and height/);el('height').value='5';el('height').oninput();assert.equal(el('export').disabled,true);assert.match(el('export-hint').textContent,/between 10 and 2000/);el('height').value='450';el('height').oninput();assert.equal(el('export').disabled,false);assert.equal(el('export-hint').textContent,'');});
 
 test('export format is shown only for multiple frames and defaults to a multipage PDF',async()=>{const {window,el}=ui();assert.equal(el('export-mode').value,'combined');assert.equal(el('export-options').hidden,true);await window.onmessage({data:{pluginMessage:{type:'selection',frames:[frame('1',595,842),frame('2',907,1276)]}}});assert.equal(el('export-options').hidden,false);await window.onmessage({data:{pluginMessage:{type:'selection',frames:[frame('1',595,842)]}}});assert.equal(el('export-options').hidden,true);});
-test('individual export snapshots filenames and locks the format while exporting',async()=>{const {window,el,context}=ui();await window.onmessage({data:{pluginMessage:{type:'selection',frames:[frame('2',907,1276),frame('1',595,842)]}}});el('export-mode').value='individual';el('export-mode').onchange();el('export').onclick();const current=vm.runInContext('job',context);assert.equal(current.individual,true);assert.deepEqual(Array.from(current.filenames),['Sheet 1.pdf','Sheet 2.pdf']);assert.equal(el('export-mode').disabled,true);await window.onmessage({data:{pluginMessage:{type:'selection',frames:[frame('3',300,400)]}}});assert.deepEqual(Array.from(current.filenames),['Sheet 1.pdf','Sheet 2.pdf']);});
-test('single frames always export one PDF even if individual mode was selected previously',async()=>{const {window,el,context}=ui();await window.onmessage({data:{pluginMessage:{type:'selection',frames:[frame('1',595,842)]}}});el('export-mode').value='individual';el('export').onclick();assert.equal(vm.runInContext('job.individual',context),false);});
+test('individual export snapshots filenames and locks the format while exporting',async()=>{const {window,el,context}=ui();await window.onmessage({data:{pluginMessage:{type:'selection',frames:[frame('2',907,1276),frame('1',595,842)]}}});el('export-mode').value='separate';el('export-mode').onchange();el('export').onclick();const current=vm.runInContext('job',context);assert.equal(current.individual,true);assert.deepEqual(Array.from(current.filenames),['Sheet 1.pdf','Sheet 2.pdf']);assert.equal(el('export-mode').disabled,true);await window.onmessage({data:{pluginMessage:{type:'selection',frames:[frame('3',300,400)]}}});assert.deepEqual(Array.from(current.filenames),['Sheet 1.pdf','Sheet 2.pdf']);});
+test('single frames always export one PDF even if individual mode was selected previously',async()=>{const {window,el,context}=ui();await window.onmessage({data:{pluginMessage:{type:'selection',frames:[frame('1',595,842)]}}});el('export-mode').value='separate';el('export').onclick();assert.equal(vm.runInContext('job.individual',context),false);});
 async function convertedPages(){const doc=await PDFLib.PDFDocument.create();for(const size of [[595,842],[907,1276]])doc.addPage(size).drawRectangle({x:12,y:34,width:100,height:50,color:PDFLib.cmyk(.1,.2,.3,.4)});return doc.save();}
 async function inspectOutput(bytes,expectedSizes,expectedICC){const result=await PDFLib.PDFDocument.load(bytes);assert.equal(result.getPageCount(),expectedSizes.length);for(let i=0;i<expectedSizes.length;i++){const page=result.getPage(i);assert.equal(page.getWidth(),expectedSizes[i].width*72/25.4);assert.equal(page.getHeight(),expectedSizes[i].height*72/25.4);const text=page.node.Contents().asArray().map(ref=>Buffer.from(PDFLib.decodePDFRawStream(result.context.lookup(ref)).decode()).toString()).join('\n');assert.match(text,/0\.1 0\.2 0\.3 0\.4 k/);assert.match(text,/100/);assert.match(text,/50/);assert(!text.includes(' rg'));}if(expectedICC){const intent=result.catalog.lookup(PDFLib.PDFName.of('OutputIntents'),PDFLib.PDFArray).lookup(0,PDFLib.PDFDict);const embedded=intent.lookup(PDFLib.PDFName.of('DestOutputProfile'),PDFLib.PDFRawStream);assert.equal(embedded.dict.lookup(PDFLib.PDFName.of('N'),PDFLib.PDFNumber).asNumber(),4);assert.deepEqual(Buffer.from(PDFLib.decodePDFRawStream(embedded).decode()),expectedICC);}else assert.equal(result.catalog.get(PDFLib.PDFName.of('OutputIntents')),undefined);}
 function exportFixture(){return {individual:true,filename:'Sheet 1.pdf',filenames:['Sheet 1.pdf','Sheet 2.pdf'],width:null,height:null,auto:true,sizes:[{width:209.9,height:297.04},{width:319.97,height:450.14}],icc:fs.readFileSync('vendor/profiles/CoatedFOGRA39.icc'),name:'Coated FOGRA39 (ISO 12647-2:2004)'};}
@@ -46,7 +50,7 @@ const sampleDownloads=()=>[{filename:'Álvaro name tag.pdf',bytes:new Uint8Array
 const anchors=node=>[...(node.tag==='a'?[node]:[]),...(node.children||[]).flatMap(anchors)];
 test('individual PDFs download as one attached ZIP with original Unicode names and exact bytes',async()=>{
  const {context,el,clicks,blobs}=ui(),outputs=sampleDownloads();context.showDownloads(outputs);
- const links=anchors(el('status'));assert.equal(links.length,1);assert.equal(clicks.length,1);
+ const links=anchors(el('status'));assert.equal(links.length,1);assert.equal(clicks.length,1);assert.equal(el('status').children[1].hidden,true);
  assert.equal(clicks[0].attached,true);assert.equal(links[0].download,'Álvaro name tag.zip');assert.equal(links[0].textContent,'Save ZIP');
  const blob=blobs.get(links[0].href);assert.equal(blob.type,'application/zip');
  const files=fflate.unzipSync(new Uint8Array(await blob.arrayBuffer()));
@@ -65,4 +69,47 @@ test('single PDF delivery mounts its original filename link before its only auto
  const {context,clicks,blobs}=ui(),output=sampleDownloads()[0];context.showDownloads([output]);
  assert.equal(clicks.length,1);assert.equal(clicks[0].attached,true);assert.equal(clicks[0].filename,output.filename);
  const blob=blobs.get(clicks[0].href);assert.equal(blob.type,'application/pdf');assert.deepEqual(Buffer.from(await blob.arrayBuffer()),Buffer.from(output.bytes));
+});
+
+const threeDownloads=()=>[...sampleDownloads(),{filename:'Sheet 3.pdf',bytes:new Uint8Array([37,80,68,70,3])}];
+const pdfClicks=h=>h.clicks.filter(click=>/\.pdf$/i.test(click.filename));
+const listenerCount=h=>[...h.listeners.values()].reduce((sum,set)=>sum+set.size,0);
+test('consecutive delivery clicks attached original files only after a paired blur and focus',()=>{
+ const h=ui(),outputs=threeDownloads();h.context.showDownloads(outputs,true);
+ assert.equal(pdfClicks(h).length,1);assert.equal(pdfClicks(h)[0].attached,true);assert.equal(pdfClicks(h)[0].filename,outputs[0].filename);
+ assert.match(h.el('status').textContent,/Cancel.*skip/i);
+ h.emit('focus');h.runTimers(1000);assert.equal(pdfClicks(h).length,1);
+ h.emit('blur');h.emit('focus');h.emit('focus');h.runTimers(999);assert.equal(pdfClicks(h).length,1);
+ h.runTimers(1);assert.equal(pdfClicks(h).length,2);assert.equal(pdfClicks(h)[1].filename,outputs[1].filename);
+ h.emit('blur');h.emit('focus');h.runTimers(1000);assert.equal(pdfClicks(h).length,3);
+ h.emit('blur');h.emit('focus');h.runTimers(1000);assert.equal(pdfClicks(h).length,3);
+ assert.equal(listenerCount(h),0);assert.equal(h.timers.size,0);assert.equal(h.messages.at(-1).type,'ready');assert.doesNotMatch(h.el('status').textContent,/PDFs? saved|saved successfully/i);
+});
+test('stopping consecutive downloads removes timers and listeners without showing download links',()=>{
+ const h=ui();h.context.showDownloads(threeDownloads(),true);h.emit('blur');h.emit('focus');
+ assert(h.timers.size>0);h.context.stopDownloadQueue();assert.equal(h.timers.size,0);assert.equal(listenerCount(h),0);
+ h.emit('blur');h.emit('focus');h.runTimers(5000);assert.equal(pdfClicks(h).length,1);
+ assert.equal(anchors(h.el('status')).filter(link=>/\.pdf$/i.test(link.download)).length,3);assert.equal(h.blobs.size,3);assert.equal(h.el('status').children[1].hidden,true);
+});
+test('consecutive downloads hide the conversion cancel button',()=>{
+ const h=ui();h.context.showDownloads(threeDownloads(),true);assert.equal(h.el('cancel').hidden,true);
+ h.emit('blur');h.emit('focus');h.runTimers(1000);assert.equal(pdfClicks(h).length,2);
+ assert.doesNotMatch(h.el('status').textContent,/Stop remaining downloads/i);
+});
+test('no native save dialog pauses the queue instead of dropping later downloads',()=>{
+ const h=ui();h.context.showDownloads(threeDownloads(),true);h.runTimers(3000);
+ assert.equal(pdfClicks(h).length,1);assert.match(h.el('status').textContent,/paused|could not detect|didn.t detect/i);
+ h.emit('blur');h.emit('focus');h.runTimers(5000);assert.equal(pdfClicks(h).length,1);
+ assert.equal(listenerCount(h),0);assert.equal(h.timers.size,0);
+});
+test('a new export stops delivery before revoking previous download URLs',async()=>{
+ const h=ui();await h.window.onmessage({data:{pluginMessage:{type:'selection',frames:[frame('1',595,842),frame('2',907,1276)]}}});
+ h.context.showDownloads(threeDownloads(),true);h.emit('blur');h.emit('focus');h.el('export').onclick();
+ assert(h.revocations.length>0);for(const revoked of h.revocations){assert.equal(revoked.listeners,0);assert.equal(revoked.timers,0);}
+ h.runTimers(5000);assert.equal(pdfClicks(h).length,1);assert.equal(listenerCount(h),0);
+});
+test('focus lost during the gap waits for another focus before requesting the next PDF',()=>{
+ const h=ui();h.context.showDownloads(threeDownloads(),true);h.emit('blur');h.emit('focus');h.emit('blur');h.runTimers(1000);
+ assert.equal(pdfClicks(h).length,1);h.emit('focus');h.runTimers(999);assert.equal(pdfClicks(h).length,1);
+ h.runTimers(1);assert.equal(pdfClicks(h).length,2);
 });

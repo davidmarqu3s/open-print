@@ -6,12 +6,12 @@ An open-source Figma plugin for exporting selected frames as a CMYK vector PDF. 
 
 ## Install
 
-1. Download `open-print-v0.2.9.zip` from [Releases](https://github.com/davidmarqu3s/open-print/releases) and extract it to a permanent folder.
+1. Download `open-print-v0.2.10.zip` from [Releases](https://github.com/davidmarqu3s/open-print/releases) and extract it to a permanent folder.
 2. In Figma desktop, choose **Plugins → Development → Import plugin from manifest…** and select its `manifest.json`.
 3. Select your frames and run **Plugins → Development → Open Print**.
 4. Keep **Use frame size** enabled, or enter your final width and height. Use the **Units** picker to choose **mm** or **in**.
-5. With multiple frames selected, choose **One multipage PDF** (default) or **Individual PDFs (ZIP)** under **Export as**. A combined PDF uses the first frame’s name; individual PDFs use each frame’s original name and download together in one ZIP named after the first frame. Duplicate filenames receive numbered suffixes so every PDF is retained. Path separators and control characters are replaced with underscores. If needed, click **Save ZIP** after conversion.
-6. Choose one of the 15 included profiles, **No profile** or **Custom CMYK profile…** and export. If needed, click **Save PDF** after conversion.
+5. With multiple frames selected, choose **One multipage PDF** (default) or **Individual PDFs** under **Export as**. A combined PDF uses the first frame’s name. Individual PDFs use each frame’s original name and open consecutive Save dialogs in Figma desktop. Save or cancel each dialog to continue; Cancel skips that file. Duplicate filenames receive numbered suffixes, and path separators and control characters are replaced with underscores. Automatic delivery pauses if a dialog cannot be detected; export again to retry.
+6. Choose one of the 15 included profiles, **No profile** or **Custom CMYK profile…** and export. Downloads start automatically.
 
 Use the CMYK ICC profile supplied or approved by your printer. With **No profile**, Ghostscript converts colors to DeviceCMYK using its default CMYK conversion and no ICC OutputIntent is embedded. With a custom profile, it controls conversion and is embedded in the PDF. Different profiles produce different CMYK values.
 
