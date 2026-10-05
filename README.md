@@ -10,7 +10,7 @@ The plugin code is licensed under GNU AGPL v3. Bundled third-party ICC profiles 
 
 ## Install
 
-1. Download `open-print-v0.2.10.zip` from [Releases](https://github.com/davidmarqu3s/open-print/releases) and extract it to a folder you’ll keep.
+1. Download the `open-print-v….zip` file from the [latest release](https://github.com/davidmarqu3s/open-print/releases/latest) and extract it to a folder you’ll keep.
 2. In Figma desktop, choose **Plugins → Development → Import plugin from manifest…** and select the extracted `manifest.json`.
 
 ## Export a PDF
@@ -127,15 +127,15 @@ The manifest uses Open Print’s Figma-assigned plugin ID. If you publish your o
 
 ## Dependencies
 
-- **Ghostscript 10.07.1:** AGPL. The complete corresponding source, including the original source tarball, is in `open-print-v0.2.2-source.zip`, attached to the [v0.2.2 release](https://github.com/davidmarqu3s/open-print/releases/tag/v0.2.2). The engine hasn’t changed since, so that archive still applies to the current release.
+- **Ghostscript 10.07.1:** AGPL. The complete corresponding source, including the original source tarball, is in the `open-print-v…-source.zip` file attached to every [release](https://github.com/davidmarqu3s/open-print/releases).
 - **WASM wrapper and build sources:** [J0shua-code/pdf-tools](https://github.com/J0shua-code/pdf-tools) at pinned commit `51131feb82b37ad51687718889b788bf425ce594`. Its source files, scripts, patches and build configuration are in `vendor/engine-source/`; duplicate generated engine binaries are left out. The engine binary built from it is `vendor/ghostscript.wasm`, and the plugin downloads it from this repository, so exports don’t depend on the upstream repository staying online.
 - **js-sha256 0.11.1:** MIT. Verifies SHA-256 checksums in JavaScript, so the plugin doesn’t depend on Web Crypto in Figma’s sandbox; [upstream source](https://github.com/emn178/js-sha256/tree/v0.11.1).
 - **pdf-lib 1.17.1:** MIT. Bundled UMD build and license; [upstream source](https://github.com/Hopding/pdf-lib/tree/v1.17.1).
 
 ### Rebuilding the engine
 
-1. Unpack `open-print-v0.2.2-source.zip`.
-2. In `vendor/engine-source`, create a `src` folder and extract `ghostscript-10.07.1.tar.gz` into it.
+1. Unpack the release’s `open-print-v…-source.zip`.
+2. In `vendor/engine-source`, create a `src` folder and extract the included `ghostscript-10.07.1.tar.gz` into it.
 3. Run `scripts/build.sh` using the included Dockerfile, or Emscripten 6.0.7 with the documented dependencies.
 4. Copy `dist/ghostscript.js` and `dist/ghostscript.wasm` into the plugin’s `vendor/` folder, then rebuild the plugin.
 5. Commit the new `vendor/ghostscript.wasm` and push it. Then point `ENGINE_URL` in `src/assets.js` and the manifest’s `allowedDomains` at that commit, and update `ENGINE_SIZE` and `ENGINE_SHA256`.
@@ -155,3 +155,11 @@ ghostscript-10.07.1.tar.gz
 ```
 
 If you redistribute a modified version, keep the applicable licenses and provide the corresponding source. ICC files have their own terms, separate from the plugin’s source license.
+
+## Releasing
+
+Changes reach `main` through pull requests and don’t create releases on their own. When a version is ready to publish to Figma Community:
+
+1. In a pull request, bump `version` in `package.json` and move the **Unreleased** notes in `CHANGELOG.md` under that version and date. Merge it once the tests pass.
+2. On GitHub, draft a new release with a new tag `v` plus that version (for example `v0.3.0`) on `main`, paste the changelog notes and publish it. A workflow then builds and attaches the plugin zip and the Ghostscript source zip.
+3. Publish to Figma Community from that plugin zip, using the same notes.

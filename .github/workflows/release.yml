@@ -1,0 +1,31 @@
+name: Release
+
+# Publishing a release on GitHub (with a new tag such as v0.3.0) builds the
+# plugin and attaches the plugin zip and the Ghostscript source zip to it.
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  attach:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Check the tag matches package.json
+        run: |
+          version=$(node -p "require('./package.json').version")
+          test "${{ github.event.release.tag_name }}" = "v$version" || { echo "Tag ${{ github.event.release.tag_name }} doesn't match package.json version $version"; exit 1; }
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+      - run: npm run build
+      - run: npm test
+      - run: scripts/package-release.sh "$VERSION"
+      - name: Attach zips to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${{ github.event.release.tag_name }}" release/*.zip --clobber
