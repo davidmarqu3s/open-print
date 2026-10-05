@@ -4,9 +4,9 @@ Notable changes to Open Print. Each release’s notes are also used on GitHub Re
 
 ## Unreleased
 
-## 0.3.0 – 2026-10-05
+## 0.1.0 – 2026-10-05
 
-The first release of the new release process. It replaces all earlier test releases.
+The first public release. It replaces all earlier private test releases.
 
 ### Features
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Builds the two release zips in release/: the plugin and the Ghostscript corresponding source.
-# Run after `npm run build`. Usage: scripts/package-release.sh 0.3.0
+# Run after `npm run build`. Usage: scripts/package-release.sh 0.1.0
 set -euo pipefail
 version="$1"
 gs_url='https://github.com/ArtifexSoftware/ghostpdl-downloads/releases/download/gs10071/ghostscript-10.07.1.tar.gz'

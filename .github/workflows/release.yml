@@ -1,6 +1,6 @@
 name: Release
 
-# Publishing a release on GitHub (with a new tag such as v0.3.0) builds the
+# Publishing a release on GitHub (with a new tag such as v0.1.0) builds the
 # plugin and attaches the plugin zip and the Ghostscript source zip to it.
 on:
   release:

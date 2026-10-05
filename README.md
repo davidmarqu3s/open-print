@@ -161,5 +161,5 @@ If you redistribute a modified version, keep the applicable licenses and provide
 Changes reach `main` through pull requests and don’t create releases on their own. When a version is ready to publish to Figma Community:
 
 1. In a pull request, bump `version` in `package.json` and move the **Unreleased** notes in `CHANGELOG.md` under that version and date. Merge it once the tests pass.
-2. On GitHub, draft a new release with a new tag `v` plus that version (for example `v0.3.0`) on `main`, paste the changelog notes and publish it. A workflow then builds and attaches the plugin zip and the Ghostscript source zip.
+2. On GitHub, draft a new release with a new tag `v` plus that version (for example `v0.1.0`) on `main`, paste the changelog notes and publish it. A workflow then builds and attaches the plugin zip and the Ghostscript source zip.
 3. Publish to Figma Community from that plugin zip, using the same notes.
