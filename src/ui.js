@@ -1,4 +1,8 @@
 const el=id=>document.getElementById(id);let frames=[],profile=null,profileName='',worker=null,busy=false,job=null,profileRead=0,customProfile=null,customName='';
+const profiles={...BUNDLED_PROFILES};
+const decodeProfile=encoded=>Uint8Array.from(atob(encoded),c=>c.charCodeAt(0));
+const encodeProfile=bytes=>{let text='';for(let offset=0;offset<bytes.length;offset+=8192)text+=String.fromCharCode(...bytes.subarray(offset,offset+8192));return btoa(text);};
+if(BUNDLED_PROFILES.custom){customProfile=decodeProfile(BUNDLED_PROFILES.custom);customName=PrintCore.profileDescription(customProfile)||'Custom CMYK profile';}
 function status(text){el('status').textContent=text;}
 function refresh(){el('export').disabled=busy||(el('profile-mode').value!=='none'&&!profile)||!frames.length||frames.some(f=>f.type!=='FRAME');el('cancel').hidden=!worker;el('profile').disabled=busy;el('profile-mode').disabled=busy;el('width').disabled=busy;el('height').disabled=busy;el('auto-size').disabled=busy;}
 function stop(){if(worker){worker.terminate();worker=null;}busy=false;job=null;refresh();parent.postMessage({pluginMessage:{type:'ready'}},'*');}
@@ -14,11 +18,13 @@ function updateSize(){
 }
 el('auto-size').onchange=updateSize;
 for(const id of ['width','height'])el(id).oninput=()=>{el('auto-size').checked=false;updateSize();};
-el('profile').onchange=async event=>{const generation=++profileRead;try{const file=event.target.files[0];profile=null;refresh();if(!file)return;if(file.size>5*1024*1024)throw new Error('ICC profile is too large.');const bytes=new Uint8Array(await file.arrayBuffer());if(generation!==profileRead)return;PrintCore.validateICC(bytes);customProfile=bytes;customName=file.name;profile=bytes;profileName=file.name;status('Ready to export.');}catch(error){if(generation!==profileRead)return;status(error.message);}refresh();};
+el('profile').onchange=async event=>{const generation=++profileRead;const mode=el('profile-mode').value;try{const file=event.target.files[0];if(!file)return;profile=null;refresh();if(file.size>5*1024*1024)throw new Error('ICC profile is too large.');const bytes=new Uint8Array(await file.arrayBuffer());if(generation!==profileRead)return;PrintCore.validateICC(bytes);const name=PrintCore.profileDescription(bytes);const entry=PROFILE_CATALOG.find(p=>p.id===mode);if(entry && name!==entry.name)throw new Error('Choose '+entry.name+'. This file contains '+(name||'an unnamed profile')+'.');if(entry){const encoded=encodeProfile(bytes);profiles[mode]=encoded;parent.postMessage({pluginMessage:{type:'save-profile',id:mode,encoded}},'*');}else{customProfile=bytes;customName=name||file.name;}chooseProfile();}catch(error){if(generation!==profileRead)return;status(error.message);}refresh();};
 el('export').onclick=()=>{try{const width=Number(el('width').value),height=Number(el('height').value);const auto=el('auto-size').checked;const sizes=auto?frames.map(f=>PrintCore.frameSize(f.width,f.height)):null;if(sizes)for(const size of sizes){PrintCore.points(size.width);PrintCore.points(size.height);}else{PrintCore.points(width);PrintCore.points(height);}job={width,height,auto,sizes,icc:profile?profile.slice():null,name:profileName};busy=true;refresh();status('Preparing frames…');parent.postMessage({pluginMessage:{type:'export',ids:frames.map(f=>f.id)}},'*');}catch(error){status(error.message);}};
 el('cancel').onclick=()=>{stop();status('Conversion cancelled.');};
 window.onmessage=async event=>{
  const msg=event.data.pluginMessage;if(!msg)return;
+ if(msg.type==='profiles'){for(const entry of PROFILE_CATALOG){const encoded=msg.profiles && msg.profiles[entry.id];if(typeof encoded==='string' && !profiles[entry.id]){try{const bytes=decodeProfile(encoded);PrintCore.validateICC(bytes);if(PrintCore.profileDescription(bytes)===entry.name)profiles[entry.id]=encoded;}catch(error){/* Ignore invalid stored files. */}}}if(!busy)chooseProfile(false);}
+ if(msg.type==='profile-storage-error')status('Profile imported for this session. Figma could not save it for next time.');
  if(msg.type==='selection'){if(busy)return;frames=msg.frames.sort((a,b)=>a.name.localeCompare(b.name,undefined,{numeric:true}));updateSize();el('frames').replaceChildren();for(const frame of frames){const li=document.createElement('li');li.textContent=frame.name+(frame.type==='FRAME'?'':' — select a frame');el('frames').append(li);}refresh();}
  if(msg.type==='status')status(msg.text);
  if(msg.type==='error'){stop();status(msg.text);}
@@ -31,16 +37,19 @@ window.onmessage=async event=>{
   const wasm=Uint8Array.from(atob(WASM_BASE64),c=>c.charCodeAt(0));worker.postMessage({wasm,pdf,icc:current.icc?current.icc.slice():null},[wasm.buffer,pdf.buffer]);
  }catch(error){stop();status(error.message);}}
  };
-function chooseProfile(){
- ++profileRead;const mode=el('profile-mode').value;
- el('custom-profile').hidden=mode!=='custom';
- if(mode==='fogra'){profile=Uint8Array.from(atob(PRESET_ICC_BASE64),c=>c.charCodeAt(0));PrintCore.validateICC(profile);profileName='Coated FOGRA39 (ISO 12647-2:2004)';}
+function chooseProfile(invalidate=true){
+ if(invalidate)++profileRead;const mode=el('profile-mode').value;const entry=PROFILE_CATALOG.find(p=>p.id===mode);
+ if(entry){profile=profiles[mode]?decodeProfile(profiles[mode]):null;profileName=entry.name;}
  else if(mode==='none'){profile=null;profileName='';}
  else {profile=customProfile;profileName=customName;}
- el('profile-hint').textContent=mode==='none'?'Exports CMYK using the default conversion. No ICC profile is embedded.':mode==='fogra'?'':'Choose your printer’s CMYK ICC profile. It will be embedded in the PDF.';
+ if(profile)PrintCore.validateICC(profile);
+ el('custom-profile').hidden=mode!=='custom'&&!!(profile||mode==='none');
+ el('profile-hint').textContent=mode==='none'?'Exports CMYK using the default conversion. No ICC profile is embedded.':entry?(profile?'':'Import this ICC file. It is saved locally when Figma storage has space.'):'Choose your printer’s CMYK ICC profile. It will be embedded in the PDF.';
  el('profile-hint').hidden=!el('profile-hint').textContent;
- status(mode==='custom'&&!profile?'Choose a CMYK profile to begin.':'Ready to export.');refresh();
+ status(entry&&!profile?'Import '+entry.name+' to begin.':mode==='custom'&&!profile?'Choose a CMYK profile to begin.':'Ready to export.');refresh();
 }
-if(!PRESET_ICC_BASE64){el('fogra-option').remove();el('profile-mode').value='none';}
-el('profile-mode').onchange=chooseProfile;chooseProfile();
+for(const group of [...new Set(PROFILE_CATALOG.map(p=>p.group))]){const optgroup=document.createElement('optgroup');optgroup.label=group;for(const entry of PROFILE_CATALOG.filter(p=>p.group===group)){const option=document.createElement('option');option.value=entry.id;option.textContent=entry.name;optgroup.append(option);}el('profile-mode').append(optgroup);}
+el('profile-mode').value=profiles.CoatedFOGRA39?'CoatedFOGRA39':customProfile?'custom':'none';
+el('profile-mode').onchange=()=>{el('profile').value='';chooseProfile();};chooseProfile();
+parent.postMessage({pluginMessage:{type:'load-profiles'}},'*');
 parent.postMessage({pluginMessage:{type:'ready'}},'*');

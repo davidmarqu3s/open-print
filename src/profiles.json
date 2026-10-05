@@ -1,0 +1,77 @@
+[
+  {
+    "id": "PSOcoated_v3",
+    "name": "PSO Coated v3",
+    "group": "European Standards"
+  },
+  {
+    "id": "ISOcoated_v2_eci",
+    "name": "ISO Coated v2 (ECI)",
+    "group": "European Standards"
+  },
+  {
+    "id": "eciCMYK_v2",
+    "name": "eciCMYK v2",
+    "group": "European Standards"
+  },
+  {
+    "id": "ISOcoated_v2_300_eci",
+    "name": "ISO Coated v2 300% (ECI)",
+    "group": "European Standards"
+  },
+  {
+    "id": "CoatedFOGRA39",
+    "name": "Coated FOGRA39 (ISO 12647-2:2004)",
+    "group": "European Standards"
+  },
+  {
+    "id": "USWebCoatedSWOP",
+    "name": "U.S. Web Coated (SWOP) v2",
+    "group": "North American Standards"
+  },
+  {
+    "id": "CoatedGRACoL2006",
+    "name": "Coated GRACoL 2006 (ISO 12647-2:2004)",
+    "group": "North American Standards"
+  },
+  {
+    "id": "WebCoatedSWOP2006Grade3",
+    "name": "Web Coated SWOP 2006 Grade 3 Paper",
+    "group": "North American Standards"
+  },
+  {
+    "id": "WebCoatedSWOP2006Grade5",
+    "name": "Web Coated SWOP 2006 Grade 5 Paper",
+    "group": "North American Standards"
+  },
+  {
+    "id": "JapanColor2011Coated",
+    "name": "Japan Color 2011 Coated",
+    "group": "Japan Standards"
+  },
+  {
+    "id": "JapanColor2001Coated",
+    "name": "Japan Color 2001 Coated",
+    "group": "Japan Standards"
+  },
+  {
+    "id": "JapanColor2003WebCoated",
+    "name": "Japan Color 2003 Web Coated",
+    "group": "Japan Standards"
+  },
+  {
+    "id": "JapanColor2001Uncoated",
+    "name": "Japan Color 2001 Uncoated",
+    "group": "Japan Standards"
+  },
+  {
+    "id": "JapanColor2002Newspaper",
+    "name": "Japan Color 2002 Newspaper",
+    "group": "Japan Standards"
+  },
+  {
+    "id": "JapanWebCoated",
+    "name": "Japan Web Coated (Ad)",
+    "group": "Japan Standards"
+  }
+]

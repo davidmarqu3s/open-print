@@ -1,5 +1,5 @@
 figma.showUI(__html__, {width:420,height:600,themeColors:true});
-let busy=false;
+let busy=false,profileSave=Promise.resolve();
 function selection() { const selected=figma.currentPage.selection;figma.ui.postMessage({type:'selection',frames:selected.map(n=>({id:n.id,name:n.name,width:n.width,height:n.height,type:n.type}))}); }
 figma.on('selectionchange',selection);
 function inspect(node,issues) {
@@ -11,6 +11,8 @@ function inspect(node,issues) {
  if(node.children)for(const child of node.children)inspect(child,issues);
 }
 figma.ui.onmessage=async msg=>{
+ if(msg.type==='load-profiles'){try{figma.ui.postMessage({type:'profiles',profiles:await figma.clientStorage.getAsync('open-print-profiles')||{}});}catch(error){figma.ui.postMessage({type:'profiles',profiles:{}});}return;}
+ if(msg.type==='save-profile'){try{if(typeof msg.id!=='string'||msg.id.length>100||typeof msg.encoded!=='string'||msg.encoded.length>7*1024*1024)throw new Error('Invalid profile');profileSave=profileSave.catch(()=>{}).then(async()=>{const profiles=await figma.clientStorage.getAsync('open-print-profiles')||{};profiles[msg.id]=msg.encoded;await figma.clientStorage.setAsync('open-print-profiles',profiles);});await profileSave;}catch(error){figma.ui.postMessage({type:'profile-storage-error'});}return;}
  if(msg.type==='ready'){selection();return;}
  if(msg.type!=='export'||busy)return;
  busy=true;

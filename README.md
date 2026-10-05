@@ -6,11 +6,11 @@ An open-source Figma plugin for exporting selected frames as a CMYK vector PDF w
 
 ## Install
 
-1. Download `open-print-v0.1.0.zip` from [Releases](https://github.com/davidmarqu3s/open-print/releases) and extract it to a permanent folder.
+1. Download `open-print-v0.2.0.zip` from [Releases](https://github.com/davidmarqu3s/open-print/releases) and extract it to a permanent folder.
 2. In Figma desktop, choose **Plugins → Development → Import plugin from manifest…** and select its `manifest.json`.
 3. Select your frames and run **Plugins → Development → Open Print**.
 4. Keep **Use frame size** enabled, or enter your final width and height in mm.
-5. Choose **No profile** or **Custom CMYK profile…** and export. If needed, click **Save PDF** after conversion.
+5. Choose a named profile, **No profile** or **Custom CMYK profile…** and export. Import the corresponding ICC file once when prompted. If needed, click **Save PDF** after conversion.
 
 Use the CMYK ICC profile supplied or approved by your printer. With **No profile**, Ghostscript converts colors to DeviceCMYK using its default CMYK conversion and no ICC OutputIntent is embedded. With a custom profile, it controls conversion and is embedded in the PDF. Different profiles produce different CMYK values.
 
@@ -44,19 +44,55 @@ npm test
 npm run build
 ```
 
-Then import `manifest.json` in Figma desktop. Thirteen tests cover sizing, CMYK profile validation/embedding, vector content, preflight, export order, no node writes, automatic sizing and persistent manual overrides. A three-page real-design browser test also verified CMYK values, preserved vectors and embedded ICC bytes against a reference export. Sample artwork and printer ICC profiles are not included in this repository.
+Then import `manifest.json` in Figma desktop. Automated tests cover sizing, CMYK profile validation/embedding, vector content, preflight, export order, no node writes, automatic sizing and persistent manual overrides. A three-page real-design browser test also verified CMYK values, preserved vectors and embedded ICC bytes against a reference export. Sample artwork and printer ICC profiles are not included in this repository.
 
-To create a personal build with a built-in CMYK preset:
+## Color profiles
+
+The selector groups these 15 official ICC description names by region:
+
+| Region | Profile |
+| --- | --- |
+| Europe | PSO Coated v3 |
+| Europe | ISO Coated v2 (ECI) |
+| Europe | eciCMYK v2 |
+| Europe | ISO Coated v2 300% (ECI) |
+| Europe | Coated FOGRA39 (ISO 12647-2:2004) |
+| North America | U.S. Web Coated (SWOP) v2 |
+| North America | Coated GRACoL 2006 (ISO 12647-2:2004) |
+| North America | Web Coated SWOP 2006 Grade 3 Paper |
+| North America | Web Coated SWOP 2006 Grade 5 Paper |
+| Japan | Japan Color 2011 Coated |
+| Japan | Japan Color 2001 Coated |
+| Japan | Japan Color 2003 Web Coated |
+| Japan | Japan Color 2001 Uncoated |
+| Japan | Japan Color 2002 Newspaper |
+| Japan | Japan Web Coated (Ad) |
+
+Public releases contain the profile catalog, not the third-party ICC binaries. Select a profile and import its ICC file; its internal name must match the selection. The plugin saves imported named profiles in Figma client storage on the current account and device, subject to Figma’s [5 MB storage quota](https://developers.figma.com/docs/plugins/api/figma-clientStorage/). If storage is full, the imported file remains usable for the session and the UI reports that it could not be saved. Profiles are used locally for conversion and embedded unchanged in exported PDFs. Custom uploads use the ICC description as the embedded profile name when available.
+
+Obtain ECI profiles from [ECI downloads](https://eci.org/doku.php_id%3Den_downloads.html), Adobe profiles from your existing Adobe installation or [Adobe downloads](https://www.adobe.com/support/downloads/iccprofiles/iccprofiles_win.html), and Japan Color 2011 from [Japan Color](https://japancolor.jp/icc.html). Follow the suppliers' license terms. On macOS, Adobe's installed profiles are usually in `/Library/Application Support/Adobe/Color/Profiles/` and its `Recommended` subfolder.
+
+Redistribution restrictions are why ICC files are not included in GitHub binaries: PSO Coated v3 explicitly requires ECI's written permission to distribute its profile; [Adobe's bundling license](https://www.adobe.com/support/downloads/iccprofiles/icc_eula_win_dist.html) imposes separate distributor and end-user obligations; Japan Color 2011 has separate restricted distribution terms. The plugin's AGPL license does not grant rights to those profiles.
+
+For a personal offline build with your available profiles, create a local JSON map from catalog IDs in `src/profiles.json` to absolute ICC file paths, then run:
+
+```sh
+node build.mjs --profiles /path/to/local-profile-paths.json
+```
+
+The builder validates CMYK headers and exact official description names. Missing entries remain importable. To preload an arbitrary custom CMYK profile instead:
 
 ```sh
 node build.mjs --profile /path/to/printer-profile.icc
 ```
 
-Only bundle profiles you have permission to redistribute. The generated UI is excluded from Git. The manifest uses a local development identifier; obtain your own Figma-assigned plugin ID before Community publication. See [Figma’s manifest documentation](https://developers.figma.com/docs/plugins/manifest/).
+Generated UI and personal path maps must stay out of Git. Do not redistribute bundled profile files without the required permissions.
+
+The manifest uses a local development identifier; obtain your own Figma-assigned plugin ID before Community publication. See [Figma’s manifest documentation](https://developers.figma.com/docs/plugins/manifest/).
 
 ## Dependency sources
 
-- **Ghostscript 10.07.1:** AGPL. Complete corresponding source, including the original source tarball, is available in `open-print-v0.1.0-source.zip` alongside the binary release.
+- **Ghostscript 10.07.1:** AGPL. Complete corresponding source, including the original source tarball, is available in `open-print-v0.2.0-source.zip` alongside the binary release.
 - **WASM wrapper/build sources:** [J0shua-code/pdf-tools](https://github.com/J0shua-code/pdf-tools), pinned commit `51131feb82b37ad51687718889b788bf425ce594`. Its source files, scripts, patches and build configuration are included under `vendor/engine-source/`; generated duplicate engine binaries are omitted.
 - **pdf-lib 1.17.1:** MIT. Bundled UMD build and license; [upstream source](https://github.com/Hopding/pdf-lib/tree/v1.17.1).
 
