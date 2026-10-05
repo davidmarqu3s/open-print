@@ -20,8 +20,9 @@ function updateSize(){
   dimensions={width:same?sizes[0].width:null,height:same?sizes[0].height:null};
   el('width').value=displayDimension(dimensions.width);el('height').value=displayDimension(dimensions.height);
   el('width').placeholder=sizes.length?'Varies':'';el('height').placeholder=sizes.length?'Varies':'';
-  el('size-hint').textContent=!sizes.length?'Select frames to infer their print size.':same?'Inferred at Figma’s native PDF scale, 72 frame units per inch.':'Each PDF page uses its own frame’s inferred size. Enter dimensions to override all pages.';
+  el('size-hint').textContent=!sizes.length?'Select frames to infer their print size.':same?'':'Each PDF page uses its own frame’s inferred size. Enter dimensions to override all pages.';
  }else el('size-hint').textContent='Your size applies to every page. Artwork keeps its size, aligned top left; smaller pages crop it.';
+ el('size-hint').hidden=!el('size-hint').textContent;
  refresh();
 }
 el('units').value='mm';
