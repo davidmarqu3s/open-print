@@ -24,7 +24,7 @@ const frame=(id,width,height)=>({id,name:'Sheet '+id,type:'FRAME',width,height})
 test('manual dimensions stay selected when frames change',async()=>{const {window,el}=ui();await window.onmessage({data:{pluginMessage:{type:'selection',frames:[frame('1',907,1276)]}}});el('width').value='320';el('width').oninput();el('height').value='450';el('height').oninput();await window.onmessage({data:{pluginMessage:{type:'selection',frames:[frame('2',595,842)]}}});assert.equal(el('auto-size').checked,false);assert.equal(el('width').value,'320');assert.equal(el('height').value,'450');});
 test('automatic dimensions update when selection changes',async()=>{const {window,el}=ui();await window.onmessage({data:{pluginMessage:{type:'selection',frames:[frame('1',907,1276)]}}});assert.equal(el('width').value,319.97);await window.onmessage({data:{pluginMessage:{type:'selection',frames:[frame('2',595,842)]}}});assert.equal(el('width').value,209.9);assert.equal(el('height').value,297.04);});
 test('all 15 official profiles are available even without bundled ICC files',()=>{const {el}=ui();assert.equal(el('profile-mode').groups.length,3);assert.equal(el('profile-mode').groups.flatMap(g=>g.options).length,15);});
-test('missing preset asks for import and blocks export',async()=>{const {window,el}=ui();await window.onmessage({data:{pluginMessage:{type:'selection',frames:[frame('1',595,842)]}}});el('profile-mode').value='PSOcoated_v3';el('profile-mode').onchange();assert.equal(el('custom-profile').hidden,false);assert.equal(el('export').disabled,true);assert.match(el('status').textContent,/Import/);});
+test('missing preset asks for import and blocks export',async()=>{const {window,el}=ui();await window.onmessage({data:{pluginMessage:{type:'selection',frames:[frame('1',595,842)]}}});el('profile-mode').value='PSOcoated_v3';el('profile-mode').onchange();assert.equal(el('custom-profile').hidden,false);assert.equal(el('export').disabled,true);assert.match(el('export-hint').textContent,/Import PSO Coated v3/);});
 function icc(name){const bytes=Buffer.alloc(156+name.length+1);bytes.writeUInt32BE(bytes.length);bytes.write('CMYK',16);bytes.write('acsp',36);bytes.writeUInt32BE(1,128);bytes.write('desc',132);bytes.writeUInt32BE(144,136);bytes.writeUInt32BE(12+name.length+1,140);bytes.write('desc',144);bytes.writeUInt32BE(name.length+1,152);bytes.write(name,156);return bytes;}
 test('named ICC imports are saved and restored with the official name',async()=>{const {window,el,messages}=ui();await window.onmessage({data:{pluginMessage:{type:'selection',frames:[frame('1',595,842)]}}});el('profile-mode').value='PSOcoated_v3';el('profile-mode').onchange();const bytes=icc('PSO Coated v3');await el('profile').onchange({target:{files:[{name:'profile.icc',size:bytes.length,arrayBuffer:async()=>bytes.buffer.slice(bytes.byteOffset,bytes.byteOffset+bytes.byteLength)}]}});assert.equal(el('custom-profile').hidden,true);assert.equal(el('export').disabled,false);const saved=messages.find(m=>m.type==='save-profile');assert.equal(saved.id,'PSOcoated_v3');const next=ui();next.el('profile-mode').value=saved.id;next.el('profile-mode').onchange();await next.window.onmessage({data:{pluginMessage:{type:'profiles',profiles:{[saved.id]:saved.encoded}}}});assert.equal(next.el('custom-profile').hidden,true);});
 test('wrong ICC cannot be imported under a named preset',async()=>{const {el,messages}=ui();el('profile-mode').value='PSOcoated_v3';el('profile-mode').onchange();const bytes=icc('Different CMYK');await el('profile').onchange({target:{files:[{name:'wrong.icc',size:bytes.length,arrayBuffer:async()=>bytes.buffer.slice(bytes.byteOffset,bytes.byteOffset+bytes.byteLength)}]}});assert.match(el('status').textContent,/This file contains Different CMYK/);assert.equal(el('export').disabled,true);assert(!messages.some(m=>m.type==='save-profile'));});
@@ -33,7 +33,7 @@ test('unit switching converts manual dimensions without accumulating rounding',a
 test('inch input exports exact physical dimensions in mm',async()=>{const {window,el,context}=ui();await window.onmessage({data:{pluginMessage:{type:'selection',frames:[frame('1',595,842)]}}});el('units').value='in';el('units').onchange();el('width').value='8.5';el('width').oninput();el('height').value='11';el('height').oninput();el('export').onclick();const job=vm.runInContext('job',context);assert(Math.abs(job.width-215.9)<1e-10);assert(Math.abs(job.height-279.4)<1e-10);assert.equal(el('units').disabled,true);});
 test('automatic and mixed frame sizes keep their physical sizes in inches',async()=>{const {window,el}=ui();await window.onmessage({data:{pluginMessage:{type:'selection',frames:[frame('1',907,1276)]}}});el('units').value='in';el('units').onchange();assert.equal(el('auto-size').checked,true);assert(Math.abs(Number(el('width').value)-319.97/25.4)<0.000001);await window.onmessage({data:{pluginMessage:{type:'selection',frames:[frame('1',907,1276),frame('2',595,842)]}}});assert.equal(el('width').value,'');assert.equal(el('width').placeholder,'Varies');});
 test('non-frame selection explains why export is blocked',async()=>{const {window,el}=ui();await window.onmessage({data:{pluginMessage:{type:'selection',frames:[frame('1',595,842),{id:'2',name:'Rectangle',type:'RECTANGLE',width:10,height:10}]}}});assert.equal(el('export').disabled,true);assert.match(el('export-hint').textContent,/Deselect “Rectangle”/);assert.equal(el('frame-count').textContent,'2 selected');});
-test('incomplete manual size blocks export until both dimensions are valid',async()=>{const {window,el}=ui();await window.onmessage({data:{pluginMessage:{type:'selection',frames:[frame('1',907,1276),frame('2',595,842)]}}});assert.equal(el('export').disabled,false);el('width').value='320';el('width').oninput();assert.equal(el('export').disabled,true);assert.match(el('export-hint').textContent,/width and height/);el('height').value='5';el('height').oninput();assert.equal(el('export').disabled,true);assert.match(el('export-hint').textContent,/between 10 and 2000/);el('height').value='450';el('height').oninput();assert.equal(el('export').disabled,false);assert.equal(el('export-hint').textContent,'');});
+test('incomplete manual size blocks export until both dimensions are valid',async()=>{const {window,el}=ui();await window.onmessage({data:{pluginMessage:{type:'selection',frames:[frame('1',907,1276),frame('2',595,842)]}}});assert.equal(el('export').disabled,false);el('width').value='320';el('width').oninput();assert.equal(el('export').disabled,true);assert.match(el('size-error').textContent,/width and height/);assert.equal(el('size-error').className,'hint');el('height').value='5';el('height').oninput();assert.equal(el('export').disabled,true);assert.match(el('size-error').textContent,/between 10 and 2000/);assert.equal(el('height-field').className,'field invalid');assert.equal(el('width-field').className,'field');el('height').value='450';el('height').oninput();assert.equal(el('export').disabled,false);assert.equal(el('size-error').textContent,'');assert.equal(el('height-field').className,'field');});
 
 test('export format is shown only for multiple frames and defaults to a multipage PDF',async()=>{const {window,el}=ui();assert.equal(el('export-mode').value,'combined');assert.equal(el('export-options').hidden,true);await window.onmessage({data:{pluginMessage:{type:'selection',frames:[frame('1',595,842),frame('2',907,1276)]}}});assert.equal(el('export-options').hidden,false);await window.onmessage({data:{pluginMessage:{type:'selection',frames:[frame('1',595,842)]}}});assert.equal(el('export-options').hidden,true);});
 test('individual export snapshots filenames and locks the format while exporting',async()=>{const {window,el,context}=ui();await window.onmessage({data:{pluginMessage:{type:'selection',frames:[frame('2',907,1276),frame('1',595,842)]}}});el('export-mode').value='separate';el('export-mode').onchange();el('export').onclick();const current=vm.runInContext('job',context);assert.equal(current.individual,true);assert.deepEqual(Array.from(current.filenames),['Sheet 1.pdf','Sheet 2.pdf']);assert.equal(el('export-mode').disabled,true);await window.onmessage({data:{pluginMessage:{type:'selection',frames:[frame('3',300,400)]}}});assert.deepEqual(Array.from(current.filenames),['Sheet 1.pdf','Sheet 2.pdf']);});
@@ -112,4 +112,46 @@ test('focus lost during the gap waits for another focus before requesting the ne
  const h=ui();h.context.showDownloads(threeDownloads(),true);h.emit('blur');h.emit('focus');h.emit('blur');h.runTimers(1000);
  assert.equal(pdfClicks(h).length,1);h.emit('focus');h.runTimers(999);assert.equal(pdfClicks(h).length,1);
  h.runTimers(1);assert.equal(pdfClicks(h).length,2);
+});
+
+const select=(h,frames)=>h.window.onmessage({data:{pluginMessage:{type:'selection',frames}}});
+const send=(h,message)=>h.window.onmessage({data:{pluginMessage:message}});
+test('an old error is cleared when the selection changes so the current blocker shows',async()=>{
+ const h=ui();await select(h,[frame('1',595,842)]);await send(h,{type:'error',text:'Gradient in Background'});
+ await select(h,[frame('1',595,842)]);assert.match(h.el('status').textContent,/Gradient/);
+ await select(h,[frame('1',595,842),{id:'2',name:'Group 3',type:'GROUP',width:10,height:10}]);
+ assert.equal(h.el('status').textContent,'');assert.match(h.el('export-hint').textContent,/Deselect “Group 3”/);
+});
+test('preflight issues are listed under their frame with a way to show each layer',async()=>{
+ const h=ui();await select(h,[frame('1',595,842),frame('2',595,842)]);
+ await send(h,{type:'error',text:'Gradient in Fill',issues:[{kind:'gradient',text:'Gradient in Fill',frameId:'2',nodeId:'9',name:'Fill'}]});
+ const rows=h.el('frames').children;assert.equal(rows.length,3);assert.equal(rows[2].className,'issue');assert.match(rows[2].textContent,/Gradient · Fill/);
+ rows[2].children[1].onclick();assert.equal(h.messages.at(-1).type,'show-layer');assert.equal(h.messages.at(-1).id,'9');
+ assert.match(h.el('status').textContent,/1 layer uses a gradient or effect/);
+ await select(h,[frame('1',595,842)]);assert.equal(h.el('frames').children.length,1);
+});
+test('frame names truncate in the middle and keep their full name as a tooltip',async()=>{
+ const h=ui(),name='Campaign / Social / Instagram story variant 12';await select(h,[{...frame('1',595,842),name}]);
+ const node=h.el('frames').children[0].children[0];assert.equal(node.title,name);assert.equal(node.children[1].textContent,' variant 12');assert.equal(node.textContent,name);
+});
+test('export button says how many PDFs or pages it will produce',async()=>{
+ const h=ui();await select(h,[frame('1',595,842)]);assert.equal(h.el('export').textContent,'Export CMYK PDF');
+ await select(h,[frame('1',595,842),frame('2',595,842),frame('3',595,842)]);assert.equal(h.el('export').textContent,'Export 3-page CMYK PDF');
+ h.el('export-mode').value='separate';h.el('export-mode').onchange();assert.equal(h.el('export').textContent,'Export 3 CMYK PDFs');
+});
+test('a frame a fraction off a paper size offers to snap to it',async()=>{
+ const h=ui();await select(h,[frame('1',842,1191)]);assert.equal(h.el('size-match').hidden,false);assert.equal(h.el('size-snap').textContent,'Use A3');
+ h.el('size-snap').onclick();assert.equal(h.el('auto-size').checked,false);assert.equal(h.el('width').value,297);assert.equal(h.el('height').value,420);assert.equal(h.el('size-match').hidden,true);
+ const exact=ui();await select(exact,[frame('1',297*72/25.4,420*72/25.4)]);assert.equal(exact.el('size-match').hidden,true);
+});
+test('progress messages show their step and cancel stays available for the whole export',async()=>{
+ const h=ui();await select(h,[frame('1',595,842)]);h.el('export').onclick();
+ assert.equal(h.el('cancel').hidden,false);assert.match(h.el('status').textContent,/Step 1 of 5/);
+ await send(h,{type:'status',text:'Exporting frame 1 of 1…'});assert.equal(h.el('cancel').hidden,false);
+ h.el('cancel').onclick();assert(h.messages.some(m=>m.type==='cancel'));assert.equal(h.el('cancel').hidden,true);
+});
+test('a finished PDF names its file and can be saved again',()=>{
+ const h=ui(),output=sampleDownloads()[0];h.context.showDownloads([output]);
+ assert.match(h.el('status').textContent,/Álvaro name tag\.pdf is ready/);assert.equal(h.el('status').className,'done');
+ h.el('status').children[2].onclick();assert.equal(h.clicks.length,2);assert.equal(h.clicks[1].filename,output.filename);
 });

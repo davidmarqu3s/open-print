@@ -21,7 +21,7 @@ Dimensions default to millimetres. Switching the **Units** picker converts the d
 
 Figma frames contain no intrinsic physical-size metadata. Automatic inference uses Figma’s native PDF scale: **72 frame units per inch**, converted to mm and rounded to 0.01 mm. Every selected frame gets its own inferred PDF page size.
 
-For example, a 907 × 1276 frame infers 319.97 × 450.14 mm. Enter 320 × 450 mm if that is your intended final page size. Editing dimensions disables automatic sizing and applies your size to every page. Manual dimensions persist across selection changes.
+For example, a 907 × 1276 frame infers 319.97 × 450.14 mm. Enter 320 × 450 mm if that is your intended final page size. When an inferred size is within 0.5 mm of a standard paper size (A0–A6, SRA3, Letter, Legal, Tabloid or a business card), the plugin offers a one-click **Use A3**-style button that enters the exact size. Editing dimensions disables automatic sizing and applies your size to every page. Manual dimensions persist across selection changes.
 
 Artwork remains at its native size, aligned to the top left. Page resizing changes PDF page boundaries; larger pages add space and smaller pages crop. The plugin does not resize or modify Figma nodes.
 
@@ -31,7 +31,7 @@ Artwork remains at its native size, aligned to the top left. Page resizing chang
 - Vector paths retained for supported artwork.
 - ICC color conversion, with optional embedded CMYK OutputIntent.
 - Existing raster images remain raster; image downsampling is disabled.
-- Gradients and visible effects are rejected before export.
+- Gradients and visible effects are rejected before export. Each one is listed under its frame with a **Show** button that zooms to the layer.
 - Crop marks already in the artwork are retained; new bleed or marks are not generated.
 - MediaBox, CropBox, TrimBox and BleedBox all use the final page size.
 - Text exports as vector outlines; editable Illustrator text is not retained. The converter omits hidden font layers and the PDF finishing step removes orphan close-path commands. Simple vector alpha masks use white mask paint for consistent Illustrator import, without changing artwork colours or luminosity masks.
