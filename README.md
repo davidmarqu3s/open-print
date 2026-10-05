@@ -1,6 +1,6 @@
 # Open Print
 
-An open-source Figma plugin for exporting selected frames as a CMYK vector PDF with print dimensions in millimetres. Conversion runs locally inside the plugin; no server or companion app is needed. Plugin code is licensed under GNU AGPL v3; bundled third-party ICC profiles retain their separate licenses. This repository is private.
+An open-source Figma plugin for exporting selected frames as a CMYK vector PDF. Conversion runs locally inside the plugin; no server or companion app is needed. Plugin code is licensed under GNU AGPL v3; bundled third-party ICC profiles retain their separate licenses. This repository is private.
 
 **Experimental:** automated tests and the complete browser export pipeline have passed. Final Figma desktop runtime compatibility is still awaiting verification, including worker/CSP startup and the file-download interaction.
 
