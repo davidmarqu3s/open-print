@@ -56,7 +56,7 @@ function updateSize(){
  refresh();
 }
 // Frames drawn at 72 units per inch land a fraction of a millimetre off standard sizes.
-const PAPER=[['A0',841,1189],['A1',594,841],['A2',420,594],['A3',297,420],['A4',210,297],['A5',148,210],['A6',105,148],['SRA3',320,450],['Letter',215.9,279.4],['Legal',215.9,355.6],['Tabloid',279.4,431.8],['Business card',85,55],['US business card',88.9,50.8]],PAPER_TOLERANCE=0.5;
+const PAPER=[['A0',841,1189],['A1',594,841],['A2',420,594],['A3',297,420],['A4',210,297],['A5',148,210],['A6',105,148],['DL',99,210],['B1',707,1000],['B2',500,707],['B3',353,500],['B4',250,353],['B5',176,250],['SRA3',320,450],['50 × 70 cm poster',500,700],['70 × 100 cm poster',700,1000],['Letter',215.9,279.4],['Legal',215.9,355.6],['Tabloid',279.4,431.8],['Business card',85,55],['US business card',88.9,50.8]],PAPER_TOLERANCE=0.5;
 function paperMatch(size){for(const [name,w,h] of PAPER)for(const [width,height] of [[w,h],[h,w]])if(Math.abs(size.width-width)<=PAPER_TOLERANCE&&Math.abs(size.height-height)<=PAPER_TOLERANCE)return size.width===width&&size.height===height?null:{name,width,height};return null;}
 function showPaperMatch(match){
  el('size-match').hidden=!match;if(!match)return;

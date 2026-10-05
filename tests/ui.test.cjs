@@ -142,6 +142,7 @@ test('export button says how many PDFs or pages it will produce',async()=>{
 test('a frame a fraction off a paper size offers to snap to it',async()=>{
  const h=ui();await select(h,[frame('1',842,1191)]);assert.equal(h.el('size-match').hidden,false);assert.equal(h.el('size-snap').textContent,'Use A3');
  h.el('size-snap').onclick();assert.equal(h.el('auto-size').checked,false);assert.equal(h.el('width').value,297);assert.equal(h.el('height').value,420);assert.equal(h.el('size-match').hidden,true);
+ const dl=ui();await select(dl,[frame('1',281,595)]);assert.equal(dl.el('size-snap').textContent,'Use DL');
  const exact=ui();await select(exact,[frame('1',297*72/25.4,420*72/25.4)]);assert.equal(exact.el('size-match').hidden,true);
 });
 test('progress messages show their step and cancel stays available for the whole export',async()=>{
