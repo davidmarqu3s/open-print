@@ -103,12 +103,79 @@ var PrintCore = {
    else page.node.set(PDFName.of('Contents'),clean(contents));
   }
  },
+ // Ghostscript leaves the source RGB colour spaces in /Resources after converting everything to CMYK.
+ // Drop entries the owning content never names, then any objects nothing reaches, so preflight sees no RGB.
+ dropUnusedColorSpaces(doc) {
+  const {PDFName,PDFDict,PDFArray,PDFRef,PDFStream,PDFRawStream,decodePDFRawStream}=PDFLib;
+  const text=bytes=>{let t='';for(let i=0;i<bytes.length;i+=8192)t+=String.fromCharCode(...bytes.subarray(i,i+8192));return t;};
+  const decode=ref=>{const stream=doc.context.lookup(ref);return stream instanceof PDFRawStream?text(decodePDFRawStream(stream).decode()):'';};
+  // Resources and their ColorSpace dictionaries can be shared, so collect the content of every owner before pruning.
+  const owners=new Map(),own=(resources,content)=>{resources=resources&&doc.context.lookup(resources);const spaces=resources instanceof PDFDict&&doc.context.lookup(resources.get(PDFName.of('ColorSpace')));if(spaces instanceof PDFDict)owners.set(spaces,[...(owners.get(spaces)||[resources]),content]);};
+  for(const page of doc.getPages()){const contents=page.node.get(PDFName.of('Contents'));const object=contents&&doc.context.lookup(contents);own(page.node.get(PDFName.of('Resources')),contents?(object instanceof PDFArray?object.asArray():[contents]).map(decode).join('\n'):'');}
+  for(const [ref,object] of doc.context.enumerateIndirectObjects()){
+   if(object instanceof PDFRawStream&&(object.dict.get(PDFName.of('Subtype'))===PDFName.of('Form')||object.dict.has(PDFName.of('PatternType'))))own(object.dict.get(PDFName.of('Resources')),decode(ref));
+   if(object instanceof PDFDict&&object.get(PDFName.of('Subtype'))===PDFName.of('Type3')){const procs=doc.context.lookup(object.get(PDFName.of('CharProcs')));own(object.get(PDFName.of('Resources')),procs instanceof PDFDict?procs.values().map(decode).join('\n'):'');}
+  }
+  for(const [spaces,[resources,...contents]] of owners){
+   const content=contents.join('\n');
+   for(const key of spaces.keys()){const name=key.asString().replace(/[.*+?^${}()|[\]\\]/g,'\\$&');if(!new RegExp(name+'(?![^\\x00\\t\\n\\f\\r ()<>\\[\\]{}/%])').test(content))spaces.delete(key);}
+   if(!spaces.keys().length)resources.delete(PDFName.of('ColorSpace'));
+  }
+  const reached=new Set(),pending=[doc.context.trailerInfo.Root,doc.context.trailerInfo.Info,doc.context.trailerInfo.Encrypt];
+  while(pending.length){
+   let value=pending.pop();if(!value)continue;
+   if(value instanceof PDFRef){if(reached.has(value.toString()))continue;reached.add(value.toString());value=doc.context.lookup(value);}
+   if(value instanceof PDFStream)value=value.dict;
+   if(value instanceof PDFDict)pending.push(...value.values());else if(value instanceof PDFArray)pending.push(...value.asArray());
+  }
+  for(const [ref] of doc.context.enumerateIndirectObjects())if(!reached.has(ref.toString()))doc.context.delete(ref);
+ },
+ // Lowest effective resolution of any raster image at final print size, following each Do through q/Q/cm and Form matrices.
+ async imageResolution(bytes) {
+  const {PDFDocument,PDFName,PDFDict,PDFArray,PDFNumber,PDFRawStream,decodePDFRawStream}=PDFLib;
+  const doc=await PDFDocument.load(bytes),seen=new Set();let lowest=null;
+  const multiply=(a,b)=>[a[0]*b[0]+a[1]*b[2],a[0]*b[1]+a[1]*b[3],a[2]*b[0]+a[3]*b[2],a[2]*b[1]+a[3]*b[3],a[4]*b[0]+a[5]*b[2]+b[4],a[4]*b[1]+a[5]*b[3]+b[5]];
+  const numbers=array=>array instanceof PDFArray?array.asArray().map(n=>doc.context.lookup(n)).map(n=>n instanceof PDFNumber?n.asNumber():0):null;
+  const walk=(content,resources,ctm,page,depth)=>{
+   if(depth>8)return;resources=doc.context.lookup(resources);
+   const xobjects=resources instanceof PDFDict?doc.context.lookup(resources.get(PDFName.of('XObject'))):null;
+   let text='';for(let i=0;i<content.length;i+=8192)text+=String.fromCharCode(...content.subarray(i,i+8192));
+   const stack=[];let operands=[];
+   for(const [token] of text.matchAll(/\/[^\s/\[\]<>(){}%]+|[^\s/\[\]<>(){}%]+/g)){
+    if(token==='BI')return;
+    if(token==='q')stack.push(ctm);else if(token==='Q')ctm=stack.pop()||ctm;
+    else if(token==='cm'&&operands.length>=6)ctm=multiply(operands.slice(-6).map(Number),ctm);
+    else if(token==='Do'&&xobjects instanceof PDFDict&&operands.length){
+     const object=doc.context.lookup(xobjects.get(PDFName.of(operands.at(-1).slice(1))));
+     if(object instanceof PDFRawStream){const dict=object.dict,subtype=dict.get(PDFName.of('Subtype'));
+      if(subtype===PDFName.of('Image')&&dict.get(PDFName.of('ImageMask'))!==PDFLib.PDFBool.True){
+       const w=doc.context.lookup(dict.get(PDFName.of('Width'))).asNumber(),h=doc.context.lookup(dict.get(PDFName.of('Height'))).asNumber();
+       const across=Math.hypot(ctm[0],ctm[1]),down=Math.hypot(ctm[2],ctm[3]);
+       if(across>0&&down>0){const ppi=Math.min(w*72/across,h*72/down);if(!lowest||ppi<lowest.ppi)lowest={ppi,page};}
+      }else if(subtype===PDFName.of('Form'))walk(decodePDFRawStream(object).decode(),dict.get(PDFName.of('Resources')),multiply(numbers(dict.get(PDFName.of('Matrix')))||[1,0,0,1,0,0],ctm),page,depth+1);
+     }
+    }
+    if(/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$/.test(token)||token[0]==='/')operands.push(token);else operands=[];
+   }
+  };
+  doc.getPages().forEach((page,i)=>{
+   const contents=page.node.get(PDFName.of('Contents'));if(!contents)return;const object=doc.context.lookup(contents);
+   const streams=(object instanceof PDFArray?object.asArray():[contents]).map(ref=>doc.context.lookup(ref)).filter(s=>s instanceof PDFRawStream);
+   const joined=streams.map(s=>decodePDFRawStream(s).decode()),content=new Uint8Array(joined.reduce((n,b)=>n+b.length+1,0));let at=0;for(const b of joined){content.set(b,at);at+=b.length;content[at++]=10;}
+   walk(content,page.node.get(PDFName.of('Resources')),[1,0,0,1,0,0],i+1,0);
+   // Tiling patterns draw in the page's default space through their own matrix.
+   const resources=doc.context.lookup(page.node.get(PDFName.of('Resources'))),patterns=resources instanceof PDFDict?doc.context.lookup(resources.get(PDFName.of('Pattern'))):null;
+   if(patterns instanceof PDFDict)for(const ref of patterns.values()){const pattern=doc.context.lookup(ref);if(pattern instanceof PDFRawStream&&!seen.has(pattern)){seen.add(pattern);walk(decodePDFRawStream(pattern).decode(),pattern.dict.get(PDFName.of('Resources')),numbers(pattern.dict.get(PDFName.of('Matrix')))||[1,0,0,1,0,0],i+1,1);}}
+  });
+  return lowest&&{ppi:Math.round(lowest.ppi),page:lowest.page,pages:doc.getPageCount()};
+ },
  async finish(bytes,icc,width,height,profileName,pageSizes) {
   if(icc) this.validateICC(icc);
   const {PDFDocument,PDFName,PDFString}=PDFLib;
   const doc=await PDFDocument.load(bytes);
   this.cleanPaths(doc);
   this.normalizeAlphaMasks(doc);
+  this.dropUnusedColorSpaces(doc);
   const pages=doc.getPages();
   if(pageSizes && pageSizes.length!==pages.length)throw new Error('Frame and PDF page counts do not match.');
   const sizes=pages.map((page,i)=>{const size=pageSizes?pageSizes[i]:{width,height};return {width:this.points(size.width),height:this.points(size.height)};});
