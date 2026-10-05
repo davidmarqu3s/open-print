@@ -6,7 +6,7 @@ Open Print is an open-source Figma plugin that exports selected frames as a vect
 
 The plugin code is licensed under GNU AGPL v3. Bundled third-party ICC profiles keep their own licenses, which is why this repository is private.
 
-> **Experimental.** The automated tests and the full export pipeline pass, and a single-PDF save has been verified in Figma desktop. Save to a writable local folder: a read-only destination, such as some Google Drive folders, can fail silently after the Save dialog closes.
+> **Experimental.** The automated tests and the full export pipeline pass, and both a single PDF and consecutive individual PDFs have been saved successfully in Figma desktop. Save to a writable local folder: a read-only destination, such as some Google Drive folders, can fail silently after the Save dialog closes.
 
 ## Install
 
@@ -113,11 +113,11 @@ node build.mjs --profile /path/to/printer-profile.icc
 
 Generated UI files stay out of Git. The repository includes a portable path map with relative paths; keep machine-specific path maps out of Git, and don’t redistribute the bundled profiles without permission.
 
-The manifest uses a local development ID. Get your own Figma-assigned plugin ID before publishing to the Community. See [Figma’s manifest documentation](https://developers.figma.com/docs/plugins/manifest/).
+The manifest uses Open Print’s Figma-assigned plugin ID. If you publish your own fork to the Community, replace it with an ID Figma assigns to you. See [Figma’s manifest documentation](https://developers.figma.com/docs/plugins/manifest/).
 
 ## Dependencies
 
-- **Ghostscript 10.07.1:** AGPL. The complete corresponding source, including the original source tarball, is in `open-print-v0.2.2-source.zip` alongside the binary release.
+- **Ghostscript 10.07.1:** AGPL. The complete corresponding source, including the original source tarball, is in `open-print-v0.2.2-source.zip`, attached to the [v0.2.2 release](https://github.com/davidmarqu3s/open-print/releases/tag/v0.2.2). The engine hasn’t changed since, so that archive still applies to the current release.
 - **WASM wrapper and build sources:** [J0shua-code/pdf-tools](https://github.com/J0shua-code/pdf-tools) at pinned commit `51131feb82b37ad51687718889b788bf425ce594`. Its source files, scripts, patches and build configuration are in `vendor/engine-source/`; duplicate generated engine binaries are left out.
 - **fflate 0.8.2:** MIT. Used for ZIP packaging; [upstream source](https://github.com/101arrowz/fflate/tree/v0.8.2).
 - **js-sha256 0.11.1:** MIT. Verifies SHA-256 checksums in JavaScript, so the plugin doesn’t depend on Web Crypto in Figma’s sandbox; [upstream source](https://github.com/emn178/js-sha256/tree/v0.11.1).
@@ -125,7 +125,7 @@ The manifest uses a local development ID. Get your own Figma-assigned plugin ID 
 
 ### Rebuilding the engine
 
-1. Unpack the full source release.
+1. Unpack `open-print-v0.2.2-source.zip`.
 2. In `vendor/engine-source`, create a `src` folder and extract `ghostscript-10.07.1.tar.gz` into it.
 3. Run `scripts/build.sh` using the included Dockerfile, or Emscripten 6.0.7 with the documented dependencies.
 4. Copy `dist/ghostscript.js` and `dist/ghostscript.wasm` into the plugin’s `vendor/` folder, then rebuild the plugin.
