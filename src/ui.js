@@ -95,7 +95,7 @@ window.onmessage=async event=>{
   await PrintShading.toCMYK(merged,async bytes=>{const output=await convert(bytes);if(job!==current)throw new Error('Conversion cancelled.');return output;});
   if(job!==current)return;const converted=await convert(await merged.save());if(job!==current)return;
   status(current.icc?'Setting print size and embedding profile…':'Setting print size…','busy');const outputs=await prepareDownloads(converted,current);if(job!==current)return;stop();showDownloads(outputs);
-  if(msg.effectPpi&&msg.effectPpi<300){const note=document.createElement('span');note.className='note';note.textContent='Shadows and blurs are '+msg.effectPpi+' ppi, below the 300 ppi print target.';el('status').append(note);}
+  if(msg.effectPpi&&msg.effectPpi<300){const note=document.createElement('span');note.className='note';note.textContent='Effects are '+msg.effectPpi+' ppi, below the 300 ppi print target.';el('status').append(note);}
  }catch(error){if(job!==current)return;stop();status(error.message,'error');}}
  };
 function stopDownloadQueue(){
