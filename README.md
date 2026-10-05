@@ -38,8 +38,8 @@ Artwork stays at its native size, aligned to the top left. Changing the page siz
 
 - **Frames:** 1 to 32 per export, ordered numerically by name.
 - **Vectors:** vector paths are kept for supported artwork.
-- **Colour:** ICC conversion, with an optional embedded CMYK OutputIntent.
-- **Images:** raster images stay raster and are never downsampled.
+- **Colour:** ICC conversion from sRGB using relative colorimetric with black point compensation (the Adobe default), with an optional embedded CMYK OutputIntent. No RGB colour spaces are left in the file.
+- **Images:** photos and other raster images are converted to CMYK pixel by pixel, stay raster and are never downsampled or recompressed lossily. If any image is below 300 ppi at its printed size, the plugin tells you after export.
 - **Gradients:** linear, radial, angular and diamond gradients (including on text, strokes and with opacity) export as vector CMYK gradients. Left alone, Ghostscript would rasterise RGB gradients at about 180 ppi and drop angular and diamond gradients entirely. Instead, each gradient is converted to DeviceCMYK first, using Ghostscript’s own conversion of the same colours on a hidden probe page. Gradients therefore match flat colours under every profile and stay resolution-independent.
 - **Effects:** drop shadow, inner shadow, layer blur and background blur. Figma bakes these into 144 ppi bitmaps when exporting PDFs, so frames that use them are exported from a temporary copy scaled up about 2.1× and scaled back down, giving roughly 300 ppi at print size. The copy is removed immediately afterwards. Frames longer than about 1,370 mm, or files where Figma won’t allow the copy (such as view-only files), fall back to a lower resolution, and the plugin tells you. Other effects, such as noise or texture, are rejected before export. Each one is listed under its frame, with a **Show** button that zooms to the layer.
 - **Marks and boxes:** crop marks already in your artwork are kept, but the plugin doesn’t add bleed or marks. MediaBox, CropBox, TrimBox and BleedBox all match the final page size.
