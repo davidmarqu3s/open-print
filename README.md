@@ -4,7 +4,7 @@
 
 Open Print is an open-source Figma plugin that exports selected frames as a vector CMYK PDF. Conversion runs entirely inside the plugin, so you don’t need a server or companion app.
 
-The plugin code is licensed under GNU AGPL v3. Bundled third-party ICC profiles keep their own licenses, which is why this repository is private.
+The plugin code is licensed under GNU AGPL v3. Bundled third-party ICC profiles keep their own licences, set by their suppliers; see [Colour profiles](#colour-profiles).
 
 > **Experimental.** The automated tests and the full export pipeline pass, and both a single PDF and consecutive individual PDFs have been saved successfully in Figma desktop. Save to a writable local folder: a read-only destination, such as some Google Drive folders, can fail silently after the Save dialog closes.
 
@@ -16,17 +16,17 @@ The plugin code is licensed under GNU AGPL v3. Bundled third-party ICC profiles 
 ## Export a PDF
 
 1. Select one or more frames and run **Plugins → Development → Open Print**.
-2. Keep **Use frame size** on, or enter your final width and height. Use **Units** to switch between **mm** and **in**.
+2. Keep **Use frame size** on, or enter your final width and height. Use the **mm**/**in** menu next to **Page size** to switch units.
 3. If you selected several frames, choose an option under **Export as**:
    - **One multipage PDF** (default) is named after the first frame.
    - **Individual PDFs** are named after each frame and open one Save dialog at a time. Save or cancel each dialog to move on; **Cancel** skips that file. Duplicate names get a numbered suffix, and path separators and control characters become underscores. If the plugin can’t detect a dialog, it pauses; export again to retry.
-4. Choose a colour profile (one of the 15 included, **No profile**, or **Custom CMYK profile…**) and click **Export CMYK PDF**. Figma then asks where to save the file.
+4. Under **Color profile**, choose a profile (one of the 15 included, **No profile**, or **Custom CMYK profile…**) and click **Export CMYK PDF**. Figma then asks where to save the file.
 
 Use the CMYK ICC profile your printer supplies or approves, because each profile produces different CMYK values. With a profile selected, it controls the conversion and is embedded in the PDF. With **No profile**, Ghostscript converts to DeviceCMYK using its default conversion and no ICC OutputIntent is embedded.
 
 ## Print sizing
 
-Dimensions default to millimetres. Switching **Units** only changes how sizes are displayed, never the physical print size. Inches convert at exactly 25.4 mm, and switching back and forth doesn’t accumulate rounding errors.
+Dimensions default to millimetres. Switching between mm and in only changes how sizes are displayed, never the physical print size. Inches convert at exactly 25.4 mm, and switching back and forth doesn’t accumulate rounding errors.
 
 Figma frames carry no physical size, so the plugin uses Figma’s native PDF scale of **72 frame units per inch**, converted to mm and rounded to 0.01 mm. Each selected frame gets its own page size.
 
@@ -58,7 +58,7 @@ Tick **Crop marks** to add marks outside the bleed. Set their offset from the tr
 
 ### Engine download and privacy
 
-On your first export in a session, the plugin downloads a pinned Ghostscript WebAssembly engine from this repository on GitHub (`vendor/ghostscript.wasm` at commit `436f731`) and checks its size and SHA-256 checksum before running it. This needs an internet connection; later exports in the same session reuse the engine. Your artwork and PDFs are never uploaded.
+On your first export in a session, the plugin downloads a pinned Ghostscript WebAssembly engine from this repository on GitHub (`vendor/ghostscript.wasm` at commit `436f731`) and checks its size and SHA-256 checksum before running it. This needs an internet connection. The engine is kept in memory, not saved to disk, so later exports reuse it until you close the plugin. Your artwork and PDFs are never uploaded, and the plugin makes no other network requests and has no analytics.
 
 The manifest allows network access to that one engine URL only. All 15 ICC profiles are bundled with lossless compression, and the build fails if the controller and UI code together exceed 15,000,000 bytes.
 
@@ -73,7 +73,9 @@ npm test
 
 Then import `manifest.json` in Figma desktop.
 
-The automated tests cover sizing, CMYK profile validation and embedding, vector content, vector CMYK gradients (using captured Figma export structures), scaled effect export, noise and texture rasterising, preflight, export order, automatic and manual sizing, and a check that original nodes are never modified. A three-page browser test on real designs also verified CMYK values, preserved vectors and embedded ICC data against a reference export. Sample artwork is not included.
+Every pull request and every push to `main` runs the same build and tests on GitHub Actions (the **test** check, on Node 22).
+
+The automated tests cover sizing, CMYK profile validation and embedding, vector content, vector CMYK gradients (using captured Figma export structures), scaled effect export, noise and texture rasterising, bleed and crop marks, image resolution and leftover RGB colour spaces, PDF clean-up, the engine download and checksum, preflight, export order, automatic and manual sizing, the plugin panel, and a check that original nodes are never modified. A three-page browser test on real designs also verified CMYK values, preserved vectors and embedded ICC data against a reference export. Sample artwork is not included.
 
 ## Colour profiles
 
@@ -101,9 +103,9 @@ All 15 ICC files live in `vendor/profiles/` and are bundled automatically, so th
 
 If a build leaves a profile out, select it and import its ICC file; the file’s internal name must match. Imported profiles are saved in Figma client storage for your account on that device, within Figma’s [5 MB storage quota](https://developers.figma.com/docs/plugins/api/figma-clientStorage/). If storage is full, the profile still works for the current session and the plugin tells you it couldn’t be saved. Profiles are only used locally and are embedded unchanged in exported PDFs. For custom profiles, the ICC description becomes the embedded profile name when one is available.
 
-You can get ECI profiles from [ECI downloads](https://eci.org/doku.php_id%3Den_downloads.html), Adobe profiles from an existing Adobe installation or [Adobe downloads](https://www.adobe.com/support/downloads/iccprofiles/iccprofiles_win.html), and Japan Color 2011 from [Japan Color](https://japancolor.jp/icc.html). Follow each supplier’s license terms. On macOS, Adobe’s profiles are usually in `/Library/Application Support/Adobe/Color/Profiles/` and its `Recommended` subfolder.
+You can get ECI profiles from [ECI downloads](https://eci.org/doku.php_id%3Den_downloads.html), Adobe profiles from an existing Adobe installation or [Adobe downloads](https://www.adobe.com/support/downloads/iccprofiles/iccprofiles_win.html), and Japan Color 2011 from [Japan Color](https://japancolor.jp/icc.html). Follow each supplier’s licence terms. On macOS, Adobe’s profiles are usually in `/Library/Application Support/Adobe/Color/Profiles/` and its `Recommended` subfolder.
 
-Because ICC files have their own distribution terms, the repository and releases stay private. See [profile sources and notices](vendor/profiles/README.md).
+ICC files have their own distribution terms, separate from the plugin’s AGPL licence, and they differ by supplier. See [profile sources and notices](vendor/profiles/README.md).
 
 ### Custom builds
 
@@ -130,7 +132,7 @@ The manifest uses Open Print’s Figma-assigned plugin ID. If you publish your o
 - **Ghostscript 10.07.1:** AGPL. The complete corresponding source, including the original source tarball, is in the `open-print-v…-source.zip` file attached to every [release](https://github.com/davidmarqu3s/open-print/releases).
 - **WASM wrapper and build sources:** [J0shua-code/pdf-tools](https://github.com/J0shua-code/pdf-tools) at pinned commit `51131feb82b37ad51687718889b788bf425ce594`. Its source files, scripts, patches and build configuration are in `vendor/engine-source/`; duplicate generated engine binaries are left out. The engine binary built from it is `vendor/ghostscript.wasm`, and the plugin downloads it from this repository, so exports don’t depend on the upstream repository staying online.
 - **js-sha256 0.11.1:** MIT. Verifies SHA-256 checksums in JavaScript, so the plugin doesn’t depend on Web Crypto in Figma’s sandbox; [upstream source](https://github.com/emn178/js-sha256/tree/v0.11.1).
-- **pdf-lib 1.17.1:** MIT. Bundled UMD build and license; [upstream source](https://github.com/Hopding/pdf-lib/tree/v1.17.1).
+- **pdf-lib 1.17.1:** MIT. Bundled UMD build and licence; [upstream source](https://github.com/Hopding/pdf-lib/tree/v1.17.1).
 
 ### Rebuilding the engine
 
