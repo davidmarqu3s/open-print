@@ -1,1 +1,17 @@
-{"name":"Open Print","id":"open-print-local","api":"1.0.0","main":"dist/code.js","ui":"dist/ui.html","editorType":["figma"],"documentAccess":"dynamic-page","networkAccess":{"allowedDomains":["none"]}}
+{
+  "name": "Open Print",
+  "id": "1688920299289399456",
+  "api": "1.0.0",
+  "main": "dist/code.js",
+  "ui": "dist/ui.html",
+  "editorType": [
+    "figma"
+  ],
+  "documentAccess": "dynamic-page",
+  "networkAccess": {
+    "allowedDomains": [
+      "https://raw.githubusercontent.com/J0shua-code/pdf-tools/51131feb82b37ad51687718889b788bf425ce594/web/ghostscript.wasm"
+    ],
+    "reasoning": "Downloads a verified conversion engine. Artwork and PDFs are processed locally inside the plugin and are never uploaded."
+  }
+}

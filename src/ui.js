@@ -1,8 +1,8 @@
-const el=id=>document.getElementById(id);let frames=[],profile=null,profileName='',worker=null,busy=false,job=null,profileRead=0,customProfile=null,customName='';
+const el=id=>document.getElementById(id);let frames=[],profile=null,profileName='',worker=null,busy=false,job=null,profileRead=0,customProfile=null,customName='',engineAbort=null;
 let unit='mm',dimensions={width:null,height:null};
 const displayDimension=value=>value===null?'':unit==='in'?Math.round(value/25.4*1e6)/1e6:value;
 const profiles={...BUNDLED_PROFILES};
-const decodeProfile=encoded=>Uint8Array.from(atob(encoded),c=>c.charCodeAt(0));
+const decodeProfile=OpenPrintAssets.decodeProfile;
 const encodeProfile=bytes=>{let text='';for(let offset=0;offset<bytes.length;offset+=8192)text+=String.fromCharCode(...bytes.subarray(offset,offset+8192));return btoa(text);};
 if(BUNDLED_PROFILES.custom){customProfile=decodeProfile(BUNDLED_PROFILES.custom);customName=PrintCore.profileDescription(customProfile)||'Custom CMYK profile';}
 function status(text,tone=''){el('status').textContent=text;el('status').className=text?tone:'';}
@@ -10,8 +10,8 @@ const FRAME_ICON='<svg width="16" height="16" viewBox="0 0 16 16" fill="currentC
 const formatSize=size=>{const value=mm=>unit==='in'?Math.round(mm/25.4*100)/100:mm;return value(size.width)+' × '+value(size.height)+' '+unit;};
 function renderFrames(){el('frames').replaceChildren();if(!frames.length){const li=document.createElement('li');li.className='empty';li.textContent='Select one or more frames on the canvas.';el('frames').append(li);}for(const frame of frames){const valid=frame.type==='FRAME',li=document.createElement('li'),name=document.createElement('span'),size=document.createElement('span');li.className=valid?'':'invalid';li.innerHTML=valid?FRAME_ICON:WARNING_ICON;name.className='name';name.textContent=frame.name;name.title=frame.name;size.className='size';size.textContent=valid?formatSize(PrintCore.frameSize(frame.width,frame.height)):'Not a frame';li.append(name,size);el('frames').append(li);}}
 function sizeProblem(){if(el('auto-size').checked)return '';if(dimensions.width===null||dimensions.height===null)return 'Enter a width and height.';try{PrintCore.points(dimensions.width);PrintCore.points(dimensions.height);return '';}catch(error){return error.message;}}
-function refresh(){const invalid=frames.filter(f=>f.type!=='FRAME'),problem=sizeProblem();el('export').disabled=busy||(el('profile-mode').value!=='none'&&!profile)||!frames.length||invalid.length>0||!!problem;el('export').textContent=busy?'Exporting…':'Export CMYK PDF';el('export-hint').textContent=busy?'':!frames.length?'Select frames to export.':invalid.length?'Only frames can be exported. Deselect '+(invalid.length===1?'“'+invalid[0].name+'”':invalid.length+' layers')+'.':problem;el('frame-count').textContent=!frames.length?'':invalid.length?frames.length+' selected':frames.length+(frames.length===1?' page':' pages');el('cancel').hidden=!worker;el('profile').disabled=busy;el('profile-mode').disabled=busy;el('width').disabled=busy;el('height').disabled=busy;el('auto-size').disabled=busy;el('units').disabled=busy;}
-function stop(){if(worker){worker.terminate();worker=null;}busy=false;job=null;refresh();parent.postMessage({pluginMessage:{type:'ready'}},'*');}
+function refresh(){const invalid=frames.filter(f=>f.type!=='FRAME'),problem=sizeProblem();el('export').disabled=busy||(el('profile-mode').value!=='none'&&!profile)||!frames.length||invalid.length>0||!!problem;el('export').textContent=busy?'Exporting…':'Export CMYK PDF';el('export-hint').textContent=busy?'':!frames.length?'Select frames to export.':invalid.length?'Only frames can be exported. Deselect '+(invalid.length===1?'“'+invalid[0].name+'”':invalid.length+' layers')+'.':problem;el('frame-count').textContent=!frames.length?'':invalid.length?frames.length+' selected':frames.length+(frames.length===1?' page':' pages');el('cancel').hidden=!worker&&!engineAbort;el('profile').disabled=busy;el('profile-mode').disabled=busy;el('width').disabled=busy;el('height').disabled=busy;el('auto-size').disabled=busy;el('units').disabled=busy;}
+function stop(){if(engineAbort){engineAbort.abort();engineAbort=null;}if(worker){worker.terminate();worker=null;}busy=false;job=null;refresh();parent.postMessage({pluginMessage:{type:'ready'}},'*');}
 function updateSize(){
  const valid=frames.filter(f=>f.type==='FRAME');
  if(el('auto-size').checked){
@@ -41,12 +41,12 @@ window.onmessage=async event=>{
  if(msg.type==='error'){stop();status(msg.text,'error');}
  if(msg.type==='pdfs' && job){const current=job;try{if(current.auto && msg.sizes)current.sizes=msg.sizes.map(size=>PrintCore.frameSize(size.width,size.height));
   status('Combining pages…','busy');const merged=await PDFLib.PDFDocument.create();for(const bytes of msg.pdfs){const source=await PDFLib.PDFDocument.load(new Uint8Array(bytes));for(const page of await merged.copyPages(source,source.getPageIndices()))merged.addPage(page);}
-  const pdf=await merged.save();if(job!==current)return;status('Converting colors to CMYK…','busy');
+  const pdf=await merged.save();if(job!==current)return;status('Loading conversion engine…','busy');const downloadAbort=new AbortController();engineAbort=downloadAbort;refresh();const downloadTimer=setTimeout(()=>downloadAbort.abort(),60000);let wasm;try{wasm=await OpenPrintAssets.loadEngine(downloadAbort.signal);}finally{clearTimeout(downloadTimer);}if(job!==current)return;engineAbort=null;status('Converting colors to CMYK…','busy');
   const url=URL.createObjectURL(new Blob([WORKER_SOURCE],{type:'text/javascript'}));worker=new Worker(url);URL.revokeObjectURL(url);refresh();
   worker.onerror=event=>{stop();status('Conversion could not start: '+event.message,'error');};
   worker.onmessage=async event=>{if(job!==current)return;worker.terminate();worker=null;refresh();try{if(event.data.error)throw new Error(event.data.error);status(current.icc?'Setting print size and embedding profile…':'Setting print size…','busy');const output=await PrintCore.finish(event.data.bytes,current.icc,current.width,current.height,current.name,current.sizes);if(job!==current)return;const url=URL.createObjectURL(new Blob([output],{type:'application/pdf'}));const a=document.createElement('a');a.href=url;a.download=current.auto?'Open-Print-frame-size.pdf':'Open-Print-'+current.displayWidth+'x'+current.displayHeight+current.unit+'.pdf';a.textContent='Save PDF';el('status').replaceChildren(document.createTextNode('Export complete.'),a);el('status').className='done';a.click();setTimeout(()=>URL.revokeObjectURL(url),60000);stop();}catch(error){stop();status(error.message,'error');}};
-  const wasm=Uint8Array.from(atob(WASM_BASE64),c=>c.charCodeAt(0));worker.postMessage({wasm,pdf,icc:current.icc?current.icc.slice():null},[wasm.buffer,pdf.buffer]);
- }catch(error){stop();status(error.message,'error');}}
+  worker.postMessage({wasm,pdf,icc:current.icc?current.icc.slice():null},[wasm.buffer,pdf.buffer]);
+ }catch(error){if(job!==current)return;stop();status(error.message,'error');}}
  };
 function chooseProfile(invalidate=true){
  if(invalidate)++profileRead;const mode=el('profile-mode').value;const entry=PROFILE_CATALOG.find(p=>p.id===mode);

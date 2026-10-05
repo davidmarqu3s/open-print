@@ -6,7 +6,7 @@ An open-source Figma plugin for exporting selected frames as a CMYK vector PDF. 
 
 ## Install
 
-1. Download `open-print-v0.2.2.zip` from [Releases](https://github.com/davidmarqu3s/open-print/releases) and extract it to a permanent folder.
+1. Download `open-print-v0.2.3.zip` from [Releases](https://github.com/davidmarqu3s/open-print/releases) and extract it to a permanent folder.
 2. In Figma desktop, choose **Plugins → Development → Import plugin from manifest…** and select its `manifest.json`.
 3. Select your frames and run **Plugins → Development → Open Print**.
 4. Keep **Use frame size** enabled, or enter your final width and height. Use the **Units** picker to choose **mm** or **in**.
@@ -35,7 +35,8 @@ Artwork remains at its native size, aligned to the top left. Page resizing chang
 - MediaBox, CropBox, TrimBox and BleedBox all use the final page size.
 - Figma text may become outlined paths or Type3 glyphs; editable Illustrator text is not guaranteed.
 - PDF/X certification, spot colors and overprint controls are outside this version’s scope.
-- External network access is denied by the manifest.
+- Automatically downloads the pinned Ghostscript WebAssembly engine from its public upstream GitHub repository when first exporting. The download is verified against its size and SHA-256 checksum before execution. Internet access is required to load the engine; subsequent exports in the same plugin session reuse it. Artwork and PDFs are never uploaded.
+- The manifest permits only the exact engine download URL. All 15 ICC profiles remain bundled using lossless compression. The build rejects controller plus UI code larger than 15,000,000 bytes.
 
 ## Build and test
 
@@ -78,7 +79,7 @@ The repository and releases remain private because ICC files have separate distr
 
 A normal `npm run build` includes the profiles using `vendor/profiles/paths.json`.
 
-For a personal offline build with your available profiles, create a local JSON map from catalog IDs in `src/profiles.json` to absolute ICC file paths, then run:
+For a personal build with your available profiles, create a local JSON map from catalog IDs in `src/profiles.json` to absolute ICC file paths, then run:
 
 ```sh
 node build.mjs --profiles /path/to/local-profile-paths.json
