@@ -68,7 +68,7 @@ footer{flex:none;display:flex;flex-direction:column;gap:8px;padding:12px 16px 16
 @keyframes spin{to{transform:rotate(360deg)}}
 </style></head><body>
 <main>
-<section><div class="head"><h2>Frames</h2><span class="meta" id="frame-count"></span></div><ol id="frames"><li class="empty">Select one or more frames on the canvas.</li></ol><div id="export-options" hidden><div class="head"><h2>Export as</h2></div><select id="export-mode" aria-label="Export as"><option value="combined">One multipage PDF</option><option value="individual">Individual PDFs</option></select></div></section>
+<section><div class="head"><h2>Frames</h2><span class="meta" id="frame-count"></span></div><ol id="frames"><li class="empty">Select one or more frames on the canvas.</li></ol><div id="export-options" hidden><div class="head"><h2>Export as</h2></div><select id="export-mode" aria-label="Export as"><option value="combined">One multipage PDF</option><option value="individual">Individual PDFs (ZIP)</option></select></div></section>
 <section><div class="head"><h2>Page size</h2><select id="units" class="compact" aria-label="Units"><option value="mm">mm</option><option value="in">in</option></select></div>
 <div class="dims"><label class="field" title="Width"><span class="prefix" aria-hidden="true">W</span><input id="width" type="number" min="10" max="2000" step=".01" aria-label="Width"><span class="suffix" id="width-unit">mm</span></label><label class="field" title="Height"><span class="prefix" aria-hidden="true">H</span><input id="height" type="number" min="10" max="2000" step=".01" aria-label="Height"><span class="suffix" id="height-unit">mm</span></label></div>
 <label class="check below"><input id="auto-size" type="checkbox" checked><span>Use frame size</span></label>

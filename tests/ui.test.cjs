@@ -1,3 +1,4 @@
+const fflate=require('../vendor/fflate.min.js');
 const {test}=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');const PDFLib=require('../vendor/pdf-lib.min.js');
 function ui(bundled={}){
  const elements={},clicks=[],blobs=new Map();let nextURL=0;
@@ -10,7 +11,7 @@ function ui(bundled={}){
  });
  const el=id=>elements[id]||(elements[id]=Object.assign(make('div'),{root:true,checked:id==='auto-size'}));
  const window={},messages=[];
- const context={window,document:{getElementById:el,createElement:make,createTextNode:text=>({textContent:text})},parent:{postMessage:x=>messages.push(x.pluginMessage)},PROFILE_CATALOG:JSON.parse(fs.readFileSync('src/profiles.json')),BUNDLED_PROFILES:bundled,OpenPrintAssets:{decodeProfile:encoded=>Uint8Array.from(atob(encoded),c=>c.charCodeAt(0))},atob,btoa,Uint8Array,DataView,Number,Error,TextEncoder,TextDecoder,Blob,URL:{createObjectURL:blob=>{const url='blob:test-'+(++nextURL);blobs.set(url,blob);return url;},revokeObjectURL:url=>blobs.delete(url)}};
+ const context={fflate,window,document:{getElementById:el,createElement:make,createTextNode:text=>({textContent:text})},parent:{postMessage:x=>messages.push(x.pluginMessage)},PROFILE_CATALOG:JSON.parse(fs.readFileSync('src/profiles.json')),BUNDLED_PROFILES:bundled,OpenPrintAssets:{decodeProfile:encoded=>Uint8Array.from(atob(encoded),c=>c.charCodeAt(0))},atob,btoa,Uint8Array,DataView,Number,Error,TextEncoder,TextDecoder,Blob,URL:{createObjectURL:blob=>{const url='blob:test-'+(++nextURL);blobs.set(url,blob);return url;},revokeObjectURL:url=>blobs.delete(url)}};
  vm.createContext(context);
  vm.runInContext(fs.readFileSync('vendor/pdf-lib.min.js','utf8'),context);vm.runInContext(fs.readFileSync('src/core.js','utf8'),context);vm.runInContext(fs.readFileSync('src/ui.js','utf8'),context);
  return {window,el,messages,context,clicks,blobs};
@@ -43,27 +44,22 @@ test('individual exports reject a converted PDF with a different frame count',as
 
 const sampleDownloads=()=>[{filename:'Álvaro name tag.pdf',bytes:new Uint8Array([37,80,68,70,1])},{filename:'Sheet 2.pdf',bytes:new Uint8Array([37,80,68,70,2])}];
 const anchors=node=>[...(node.tag==='a'?[node]:[]),...(node.children||[]).flatMap(anchors)];
-test('individual PDF delivery provides attached links with original filenames and no automatic download loop',async()=>{
+test('individual PDFs download as one attached ZIP with original Unicode names and exact bytes',async()=>{
  const {context,el,clicks,blobs}=ui(),outputs=sampleDownloads();context.showDownloads(outputs);
- assert.equal(clicks.length,0);
- const links=anchors(el('status'));assert.equal(links.length,outputs.length);
- for(let i=0;i<outputs.length;i++){
-  assert.equal(links[i].download,outputs[i].filename);assert.equal(links[i].isConnected,true);
-  const blob=blobs.get(links[i].href);assert.equal(blob.type,'application/pdf');
-  assert.deepEqual(Buffer.from(await blob.arrayBuffer()),Buffer.from(outputs[i].bytes));
-  links[i].click();
- }
- assert.equal(clicks.length,2);assert(clicks.every(click=>click.attached));assert.deepEqual(clicks.map(click=>click.filename),outputs.map(output=>output.filename));
- assert(!String(el('status').textContent||'').includes('Export complete'));
+ const links=anchors(el('status'));assert.equal(links.length,1);assert.equal(clicks.length,1);
+ assert.equal(clicks[0].attached,true);assert.equal(links[0].download,'Álvaro name tag.zip');assert.equal(links[0].textContent,'Save ZIP');
+ const blob=blobs.get(links[0].href);assert.equal(blob.type,'application/zip');
+ const files=fflate.unzipSync(new Uint8Array(await blob.arrayBuffer()));
+ assert.deepEqual(Object.keys(files),outputs.map(output=>output.filename));
+ for(const output of outputs)assert.deepEqual(Buffer.from(files[output.filename]),Buffer.from(output.bytes));
 });
-test('duplicate frame names keep separate PDF links and unchanged bytes',async()=>{
- const {context,el,clicks,blobs}=ui(),outputs=sampleDownloads();outputs[1].filename=outputs[0].filename;context.showDownloads(outputs);
- assert.equal(clicks.length,0);
- const links=anchors(el('status'));assert.equal(links.length,2);assert.notEqual(links[0].href,links[1].href);
- for(let i=0;i<links.length;i++){
-  assert.equal(links[i].download,outputs[i].filename);assert.equal(links[i].isConnected,true);
-  assert.deepEqual(Buffer.from(await blobs.get(links[i].href).arrayBuffer()),Buffer.from(outputs[i].bytes));
- }
+test('ZIP packaging safely keeps every duplicate and colliding filename',async()=>{
+ const {context,el,blobs}=ui();const names=['Sheet.pdf','Sheet.pdf','Sheet (2).pdf','sheet.pdf','../Label/Tag.pdf'];
+ const outputs=names.map((filename,i)=>({filename,bytes:new Uint8Array([i])}));context.showDownloads(outputs);
+ const blob=blobs.get(anchors(el('status'))[0].href),files=fflate.unzipSync(new Uint8Array(await blob.arrayBuffer()));
+ assert.equal(Object.keys(files).length,names.length);assert(Object.keys(files).every(name=>!/[\\/]/.test(name)));
+ assert.deepEqual(Object.values(files).map(bytes=>bytes[0]),[0,1,2,3,4]);
+ assert.equal(files['Sheet.pdf'][0],0);assert.equal(files['Sheet (2).pdf'][0],1);
 });
 test('single PDF delivery mounts its original filename link before its only automatic click',async()=>{
  const {context,clicks,blobs}=ui(),output=sampleDownloads()[0];context.showDownloads([output]);

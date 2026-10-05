@@ -15,7 +15,7 @@ const bundled={};
 for(const entry of catalog){if(!paths[entry.id])continue;const bytes=fs.readFileSync(paths[entry.id]);if(bytes.toString('ascii',16,20)!=='CMYK'||bytes.toString('ascii',36,40)!=='acsp')throw new Error('Invalid ICC: '+entry.name);if(core.PrintCore.profileDescription(bytes)!==entry.name)throw new Error('Profile name does not match '+entry.name);bundled[entry.id]=packProfile(bytes);}
 if(preset){core.PrintCore.validateICC(preset);bundled.custom=packProfile(preset);}
 const worker=read('vendor/ghostscript.js')+'\n'+read('src/worker.js');
-const bundle=read('vendor/pdf-lib.min.js')+'\n'+read('src/core.js')+'\n'+read('vendor/sha256.js')+'\n'+read('src/assets.js')+'\nconst WORKER_SOURCE='+JSON.stringify(worker)+';\nconst PROFILE_CATALOG='+JSON.stringify(catalog)+';\nconst BUNDLED_PROFILES='+JSON.stringify(bundled)+';\n'+read('src/ui.js');
+const bundle=read('vendor/pdf-lib.min.js')+'\n'+read('src/core.js')+'\n'+read('vendor/sha256.js')+'\n'+read('vendor/fflate.min.js')+'\n'+read('src/assets.js')+'\nconst WORKER_SOURCE='+JSON.stringify(worker)+';\nconst PROFILE_CATALOG='+JSON.stringify(catalog)+';\nconst BUNDLED_PROFILES='+JSON.stringify(bundled)+';\n'+read('src/ui.js');
 fs.writeFileSync('dist/ui.html',read('src/ui.html').replace('/*BUNDLE*/',()=>bundle.replace(/<\/script/gi,'<\\/script')));fs.copyFileSync('src/controller.js','dist/code.js');
 
 const size=fs.statSync('dist/ui.html').size+fs.statSync('dist/code.js').size;console.log('Plugin code: '+size+' bytes (limit 15,000,000)');if(size>15000000)throw new Error('Plugin exceeds Figma’s 15 MB publishing limit.');

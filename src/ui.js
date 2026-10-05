@@ -49,15 +49,22 @@ window.onmessage=async event=>{
   worker.postMessage({wasm,pdf,icc:current.icc?current.icc.slice():null},[wasm.buffer,pdf.buffer]);
  }catch(error){if(job!==current)return;stop();status(error.message,'error');}}
  };
-function showDownloads(outputs){
- const links=document.createElement('div');links.className='downloads';const anchors=[];
+function packageDownloads(outputs){
+ if(outputs.length===1)return {...outputs[0],type:'application/pdf'};
+ const files=Object.create(null),used=new Set();
  for(const output of outputs){
-  const url=URL.createObjectURL(new Blob([output.bytes],{type:'application/pdf'}));const a=document.createElement('a');
-  a.href=url;a.download=output.filename;a.textContent=outputs.length===1?'Save PDF':output.filename;links.append(a);downloadUrls.push(url);anchors.push(a);
+  const original=output.filename.replace(/[\\/\x00-\x1f]/g,'_');let name=original,n=2;
+  while(used.has(name.toLowerCase()))name=original.replace(/\.pdf$/i,'')+' ('+(n++)+').pdf';
+  used.add(name.toLowerCase());files[name]=output.bytes;
  }
- el('status').replaceChildren(document.createTextNode(outputs.length===1?'PDF ready.':'Save each PDF:'),links);el('status').className='done';
- if(outputs.length===1)anchors[0].click();
- return anchors;
+ return {filename:outputs[0].filename.replace(/[\\/\x00-\x1f]/g,'_').replace(/\.pdf$/i,'')+'.zip',bytes:fflate.zipSync(files,{level:0}),type:'application/zip'};
+}
+function showDownloads(outputs){
+ const output=packageDownloads(outputs),links=document.createElement('div');links.className='downloads';
+ const url=URL.createObjectURL(new Blob([output.bytes],{type:output.type})),a=document.createElement('a');
+ a.href=url;a.download=output.filename;a.textContent=outputs.length===1?'Save PDF':'Save ZIP';links.append(a);downloadUrls.push(url);
+ el('status').replaceChildren(document.createTextNode(outputs.length===1?'PDF ready.':'ZIP ready.'),links);el('status').className='done';
+ a.click();return [a];
 }
 async function prepareDownloads(bytes,current){
  if(!current.individual)return [{filename:current.filename,bytes:await PrintCore.finish(bytes,current.icc,current.width,current.height,current.name,current.sizes)}];

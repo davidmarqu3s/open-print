@@ -2,15 +2,15 @@
 
 An open-source Figma plugin for exporting selected frames as a CMYK vector PDF. Conversion runs locally inside the plugin; no server or companion app is needed. Plugin code is licensed under GNU AGPL v3; bundled third-party ICC profiles retain their separate licenses. This repository is private.
 
-**Experimental:** automated tests and the complete browser export pipeline have passed. Final Figma desktop runtime compatibility is still awaiting verification, including worker/CSP startup and the file-download interaction.
+**Experimental:** automated tests and the complete export pipeline have passed. A real single-PDF save was verified in Figma desktop. Save to a writable local folder; a read-only Google Drive destination can silently fail after the Save dialog closes.
 
 ## Install
 
-1. Download `open-print-v0.2.6.zip` from [Releases](https://github.com/davidmarqu3s/open-print/releases) and extract it to a permanent folder.
+1. Download `open-print-v0.2.7.zip` from [Releases](https://github.com/davidmarqu3s/open-print/releases) and extract it to a permanent folder.
 2. In Figma desktop, choose **Plugins → Development → Import plugin from manifest…** and select its `manifest.json`.
 3. Select your frames and run **Plugins → Development → Open Print**.
 4. Keep **Use frame size** enabled, or enter your final width and height. Use the **Units** picker to choose **mm** or **in**.
-5. With multiple frames selected, choose **One multipage PDF** (default) or **Individual PDFs** under **Export as**. A combined PDF uses the first frame’s name; individual PDFs use each frame’s original name. After conversion, click each filename to save that PDF. Each explicit click provides the user action required by browser download restrictions; individual mode does not trigger multiple automatic downloads.
+5. With multiple frames selected, choose **One multipage PDF** (default) or **Individual PDFs (ZIP)** under **Export as**. A combined PDF uses the first frame’s name; individual PDFs use each frame’s original name and download together in one ZIP named after the first frame. Duplicate filenames receive numbered suffixes so every PDF is retained. Path separators and control characters are replaced with underscores. If needed, click **Save ZIP** after conversion.
 6. Choose one of the 15 included profiles, **No profile** or **Custom CMYK profile…** and export. If needed, click **Save PDF** after conversion.
 
 Use the CMYK ICC profile supplied or approved by your printer. With **No profile**, Ghostscript converts colors to DeviceCMYK using its default CMYK conversion and no ICC OutputIntent is embedded. With a custom profile, it controls conversion and is embedded in the PDF. Different profiles produce different CMYK values.
@@ -100,6 +100,7 @@ The manifest uses a local development identifier; obtain your own Figma-assigned
 
 - **Ghostscript 10.07.1:** AGPL. Complete corresponding source, including the original source tarball, is available in `open-print-v0.2.2-source.zip` alongside the binary release.
 - **WASM wrapper/build sources:** [J0shua-code/pdf-tools](https://github.com/J0shua-code/pdf-tools), pinned commit `51131feb82b37ad51687718889b788bf425ce594`. Its source files, scripts, patches and build configuration are included under `vendor/engine-source/`; generated duplicate engine binaries are omitted.
+- **fflate 0.8.2:** MIT. Bundled ZIP packaging; [upstream source](https://github.com/101arrowz/fflate/tree/v0.8.2).
 - **js-sha256 0.11.1:** MIT. Bundled JavaScript SHA-256 verification avoids relying on Web Crypto in Figma’s sandbox; [upstream source](https://github.com/emn178/js-sha256/tree/v0.11.1).
 - **pdf-lib 1.17.1:** MIT. Bundled UMD build and license; [upstream source](https://github.com/Hopding/pdf-lib/tree/v1.17.1).
 
