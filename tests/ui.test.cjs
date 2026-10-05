@@ -1,4 +1,3 @@
-const fflate=require('../vendor/fflate.min.js');
 const {test}=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');const PDFLib=require('../vendor/pdf-lib.min.js');
 function ui(bundled={}){
  const elements={},clicks=[],blobs=new Map(),listeners=new Map(),timers=new Map(),revocations=[];let nextURL=0,nextTimer=0,now=0,focused=true;
@@ -15,7 +14,7 @@ function ui(bundled={}){
  });
  const el=id=>elements[id]||(elements[id]=Object.assign(make('div'),{root:true,checked:id==='auto-size'}));
  const window={addEventListener(type,fn){if(!listeners.has(type))listeners.set(type,new Set());listeners.get(type).add(fn);},removeEventListener(type,fn){listeners.get(type)?.delete(fn);}},messages=[];
- const context={fflate,window,setTimeout:(fn,delay)=>{const id=++nextTimer;timers.set(id,{fn,at:now+delay});return id;},clearTimeout:id=>timers.delete(id),document:{hasFocus:()=>focused,getElementById:el,createElement:make,createTextNode:text=>({textContent:text})},parent:{postMessage:x=>messages.push(x.pluginMessage)},PROFILE_CATALOG:JSON.parse(fs.readFileSync('src/profiles.json')),BUNDLED_PROFILES:bundled,OpenPrintAssets:{decodeProfile:encoded=>Uint8Array.from(atob(encoded),c=>c.charCodeAt(0))},atob,btoa,Uint8Array,DataView,Number,Error,TextEncoder,TextDecoder,Blob,URL:{createObjectURL:blob=>{const url='blob:test-'+(++nextURL);blobs.set(url,blob);return url;},revokeObjectURL:url=>{revocations.push({url,listeners:[...listeners.values()].reduce((n,set)=>n+set.size,0),timers:timers.size});blobs.delete(url);}}};
+ const context={window,setTimeout:(fn,delay)=>{const id=++nextTimer;timers.set(id,{fn,at:now+delay});return id;},clearTimeout:id=>timers.delete(id),document:{hasFocus:()=>focused,getElementById:el,createElement:make,createTextNode:text=>({textContent:text})},parent:{postMessage:x=>messages.push(x.pluginMessage)},PROFILE_CATALOG:JSON.parse(fs.readFileSync('src/profiles.json')),BUNDLED_PROFILES:bundled,OpenPrintAssets:{decodeProfile:encoded=>Uint8Array.from(atob(encoded),c=>c.charCodeAt(0))},atob,btoa,Uint8Array,DataView,Number,Error,TextEncoder,TextDecoder,Blob,URL:{createObjectURL:blob=>{const url='blob:test-'+(++nextURL);blobs.set(url,blob);return url;},revokeObjectURL:url=>{revocations.push({url,listeners:[...listeners.values()].reduce((n,set)=>n+set.size,0),timers:timers.size});blobs.delete(url);}}};
  vm.createContext(context);
  vm.runInContext(fs.readFileSync('vendor/pdf-lib.min.js','utf8'),context);vm.runInContext(fs.readFileSync('src/core.js','utf8'),context);vm.runInContext(fs.readFileSync('src/ui.js','utf8'),context);
  return {window,el,messages,context,clicks,blobs,emit,runTimers,timers,listeners,revocations};
@@ -48,22 +47,14 @@ test('individual exports reject a converted PDF with a different frame count',as
 
 const sampleDownloads=()=>[{filename:'Álvaro name tag.pdf',bytes:new Uint8Array([37,80,68,70,1])},{filename:'Sheet 2.pdf',bytes:new Uint8Array([37,80,68,70,2])}];
 const anchors=node=>[...(node.tag==='a'?[node]:[]),...(node.children||[]).flatMap(anchors)];
-test('individual PDFs download as one attached ZIP with original Unicode names and exact bytes',async()=>{
- const {context,el,clicks,blobs}=ui(),outputs=sampleDownloads();context.showDownloads(outputs);
- const links=anchors(el('status'));assert.equal(links.length,1);assert.equal(clicks.length,1);assert.equal(el('status').children[1].hidden,true);
- assert.equal(clicks[0].attached,true);assert.equal(links[0].download,'Álvaro name tag.zip');assert.equal(links[0].textContent,'Save ZIP');
- const blob=blobs.get(links[0].href);assert.equal(blob.type,'application/zip');
- const files=fflate.unzipSync(new Uint8Array(await blob.arrayBuffer()));
- assert.deepEqual(Object.keys(files),outputs.map(output=>output.filename));
- for(const output of outputs)assert.deepEqual(Buffer.from(files[output.filename]),Buffer.from(output.bytes));
-});
-test('ZIP packaging safely keeps every duplicate and colliding filename',async()=>{
+test('individual PDFs keep every duplicate and colliding filename as a separate PDF',async()=>{
  const {context,el,blobs}=ui();const names=['Sheet.pdf','Sheet.pdf','Sheet (2).pdf','sheet.pdf','../Label/Tag.pdf'];
  const outputs=names.map((filename,i)=>({filename,bytes:new Uint8Array([i])}));context.showDownloads(outputs);
- const blob=blobs.get(anchors(el('status'))[0].href),files=fflate.unzipSync(new Uint8Array(await blob.arrayBuffer()));
- assert.equal(Object.keys(files).length,names.length);assert(Object.keys(files).every(name=>!/[\\/]/.test(name)));
- assert.deepEqual(Object.values(files).map(bytes=>bytes[0]),[0,1,2,3,4]);
- assert.equal(files['Sheet.pdf'][0],0);assert.equal(files['Sheet (2).pdf'][0],1);
+ const links=anchors(el('status'));assert.equal(links.length,names.length);assert(links.every(link=>!/[\\/]/.test(link.download)));
+ assert.deepEqual(links.map(link=>link.download),['Sheet.pdf','Sheet (2).pdf','Sheet (2) (2).pdf','sheet (3).pdf','.._Label_Tag.pdf']);
+ for(let i=0;i<links.length;i++){const blob=blobs.get(links[i].href);assert.equal(blob.type,'application/pdf');assert.equal(new Uint8Array(await blob.arrayBuffer())[0],i);}
+ assert.equal(new Set(links.map(link=>link.download.toLowerCase())).size,names.length);
+ context.stopDownloadQueue();
 });
 test('single PDF delivery mounts its original filename link before its only automatic click',async()=>{
  const {context,clicks,blobs}=ui(),output=sampleDownloads()[0];context.showDownloads([output]);
@@ -75,7 +66,7 @@ const threeDownloads=()=>[...sampleDownloads(),{filename:'Sheet 3.pdf',bytes:new
 const pdfClicks=h=>h.clicks.filter(click=>/\.pdf$/i.test(click.filename));
 const listenerCount=h=>[...h.listeners.values()].reduce((sum,set)=>sum+set.size,0);
 test('consecutive delivery clicks attached original files only after a paired blur and focus',()=>{
- const h=ui(),outputs=threeDownloads();h.context.showDownloads(outputs,true);
+ const h=ui(),outputs=threeDownloads();h.context.showDownloads(outputs);
  assert.equal(pdfClicks(h).length,1);assert.equal(pdfClicks(h)[0].attached,true);assert.equal(pdfClicks(h)[0].filename,outputs[0].filename);
  assert.match(h.el('status').textContent,/Cancel.*skip/i);
  h.emit('focus');h.runTimers(1000);assert.equal(pdfClicks(h).length,1);
@@ -86,30 +77,30 @@ test('consecutive delivery clicks attached original files only after a paired bl
  assert.equal(listenerCount(h),0);assert.equal(h.timers.size,0);assert.equal(h.messages.at(-1).type,'ready');assert.doesNotMatch(h.el('status').textContent,/PDFs? saved|saved successfully/i);
 });
 test('stopping consecutive downloads removes timers and listeners without showing download links',()=>{
- const h=ui();h.context.showDownloads(threeDownloads(),true);h.emit('blur');h.emit('focus');
+ const h=ui();h.context.showDownloads(threeDownloads());h.emit('blur');h.emit('focus');
  assert(h.timers.size>0);h.context.stopDownloadQueue();assert.equal(h.timers.size,0);assert.equal(listenerCount(h),0);
  h.emit('blur');h.emit('focus');h.runTimers(5000);assert.equal(pdfClicks(h).length,1);
  assert.equal(anchors(h.el('status')).filter(link=>/\.pdf$/i.test(link.download)).length,3);assert.equal(h.blobs.size,3);assert.equal(h.el('status').children[1].hidden,true);
 });
 test('consecutive downloads hide the conversion cancel button',()=>{
- const h=ui();h.context.showDownloads(threeDownloads(),true);assert.equal(h.el('cancel').hidden,true);
+ const h=ui();h.context.showDownloads(threeDownloads());assert.equal(h.el('cancel').hidden,true);
  h.emit('blur');h.emit('focus');h.runTimers(1000);assert.equal(pdfClicks(h).length,2);
  assert.doesNotMatch(h.el('status').textContent,/Stop remaining downloads/i);
 });
 test('no native save dialog pauses the queue instead of dropping later downloads',()=>{
- const h=ui();h.context.showDownloads(threeDownloads(),true);h.runTimers(3000);
+ const h=ui();h.context.showDownloads(threeDownloads());h.runTimers(3000);
  assert.equal(pdfClicks(h).length,1);assert.match(h.el('status').textContent,/paused|could not detect|didn.t detect/i);
  h.emit('blur');h.emit('focus');h.runTimers(5000);assert.equal(pdfClicks(h).length,1);
  assert.equal(listenerCount(h),0);assert.equal(h.timers.size,0);
 });
 test('a new export stops delivery before revoking previous download URLs',async()=>{
  const h=ui();await h.window.onmessage({data:{pluginMessage:{type:'selection',frames:[frame('1',595,842),frame('2',907,1276)]}}});
- h.context.showDownloads(threeDownloads(),true);h.emit('blur');h.emit('focus');h.el('export').onclick();
+ h.context.showDownloads(threeDownloads());h.emit('blur');h.emit('focus');h.el('export').onclick();
  assert(h.revocations.length>0);for(const revoked of h.revocations){assert.equal(revoked.listeners,0);assert.equal(revoked.timers,0);}
  h.runTimers(5000);assert.equal(pdfClicks(h).length,1);assert.equal(listenerCount(h),0);
 });
 test('focus lost during the gap waits for another focus before requesting the next PDF',()=>{
- const h=ui();h.context.showDownloads(threeDownloads(),true);h.emit('blur');h.emit('focus');h.emit('blur');h.runTimers(1000);
+ const h=ui();h.context.showDownloads(threeDownloads());h.emit('blur');h.emit('focus');h.emit('blur');h.runTimers(1000);
  assert.equal(pdfClicks(h).length,1);h.emit('focus');h.runTimers(999);assert.equal(pdfClicks(h).length,1);
  h.runTimers(1);assert.equal(pdfClicks(h).length,2);
 });
