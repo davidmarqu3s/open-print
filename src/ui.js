@@ -55,7 +55,7 @@ function chooseProfile(invalidate=true){
  else {profile=customProfile;profileName=customName;}
  if(profile)PrintCore.validateICC(profile);
  el('custom-profile').hidden=mode!=='custom'&&!!(profile||mode==='none');
- el('profile-hint').textContent=mode==='none'?'Exports CMYK using the default conversion. No ICC profile is embedded.':entry?(profile?'Embedded in the PDF as its output intent.':'This profile isn’t bundled. Import its ICC file once; Figma keeps it locally when storage has space.'):profile?'Using '+profileName+'. It will be embedded in the PDF.':'Choose your printer’s CMYK ICC profile. It will be embedded in the PDF.';
+ el('profile-hint').textContent=mode==='none'?'Exports CMYK using the default conversion. No ICC profile is embedded.':entry?(profile?'':'This profile isn’t bundled. Import its ICC file once; Figma keeps it locally when storage has space.'):profile?'Using '+profileName+'. It will be embedded in the PDF.':'Choose your printer’s CMYK ICC profile. It will be embedded in the PDF.';
  el('profile-hint').hidden=!el('profile-hint').textContent;
  status(entry&&!profile?'Import '+entry.name+' to begin.':mode==='custom'&&!profile?'Choose a CMYK profile to begin.':'');refresh();
 }
