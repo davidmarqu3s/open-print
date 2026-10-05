@@ -36,7 +36,7 @@ Artwork stays at its native size, aligned to the top left. Changing the page siz
 
 ## Bleed and crop marks
 
-Bleed is built on the canvas, so you can see it before exporting. Select frames, enter a bleed (3 mm by default) and click **Add bleed**. Change the amount and click **Update bleed** to resize it. Each frame gets a locked **Bleed** layer at the bottom, sized to the trim plus the bleed on every side, and the frame’s background fills move onto it. **Clip content** is turned off, so images placed past the frame edge show exactly as they will print. The dashed red outline marks the bleed edge and is never exported. **Remove** moves the background back onto the frame, removes the layer and restores clipping.
+Bleed is built on the canvas, so you can see it before exporting. Select frames, enter a bleed (3 mm by default) and click **Add bleed**. To resize it, change the amount and press Return. Each frame gets a locked **Bleed** layer at the bottom, sized to the trim plus the bleed on every side, and the frame’s background fills move onto it. **Clip content** is turned off, so images placed past the frame edge show exactly as they will print. The dashed red outline marks the bleed edge and is never exported. Once a frame has bleed, the same button reads **Remove bleed**: it moves the background back onto the frame, removes the layer and restores clipping.
 
 The frame is always the trim size. Anything beyond the bleed edge is cut from the PDF.
 

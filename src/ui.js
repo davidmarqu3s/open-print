@@ -56,11 +56,12 @@ function profileProblem(){if(el('profile-mode').value==='none'||profile)return '
 function refresh(){const invalid=frames.filter(f=>f.type!=='FRAME'),problem=sizeProblem(),count=frames.length-invalid.length,separate=el('export-mode').value==='separate';const marking=marksProblem();el('export').disabled=busy||!!downloadQueue||!!profileProblem()||!frames.length||invalid.length>0||!!problem||!!marking;el('export').textContent=busy?'Exporting…':count<2?'Export CMYK PDF':separate?'Export '+count+' CMYK PDFs':'Export '+count+'-page CMYK PDF';el('export-hint').textContent=busy?'':!frames.length?'Select frames to export.':invalid.length?'Only frames can be exported. Deselect '+(invalid.length===1?'“'+invalid[0].name+'”':invalid.length+' layers')+'.':problem?'':marking?'Fix the crop mark settings to export.':profileProblem();
  const widthInvalid=fieldInvalid('width'),heightInvalid=fieldInvalid('height');el('width-field').className='field'+(widthInvalid?' invalid':'');el('height-field').className='field'+(heightInvalid?' invalid':'');el('size-error').textContent=problem;el('size-error').className='hint'+(widthInvalid||heightInvalid?' error':'');el('size-snap').disabled=busy||!!downloadQueue;el('frame-count').textContent=!frames.length?'':invalid.length?frames.length+' selected':frames.length+(frames.length===1?' page':' pages');el('cancel').hidden=!busy;el('cancel').textContent='Cancel';el('profile').disabled=busy||!!downloadQueue;el('profile-mode').disabled=busy||!!downloadQueue;el('width').disabled=busy||!!downloadQueue;el('height').disabled=busy||!!downloadQueue;el('auto-size').disabled=busy||!!downloadQueue;el('units').disabled=busy||!!downloadQueue;el('export-options').hidden=count<2;el('export-mode').disabled=busy||!!downloadQueue;
  const locked=busy||!!downloadQueue,bleeds=frames.map(frameBleed).filter(b=>b),shown=[...new Set(bleeds)];
- const current=count&&bleeds.length===count&&shown.length===1&&shown[0]===bleedSetting;
- el('show-bleed').disabled=locked||!count||!!bleedProblem()||current;el('hide-bleed').disabled=locked||!bleeds.length;el('bleed').disabled=locked;
- el('show-bleed').textContent=count&&bleeds.length===count&&!current?'Update bleed':'Add bleed';
+ // One button: Remove bleed once every selected frame has it, otherwise Add bleed. Editing the field resizes bleed that is already there.
+ const all=count&&bleeds.length===count;
+ el('bleed-toggle').textContent=all?'Remove bleed':'Add bleed';el('bleed-toggle').disabled=locked||!count||(!all&&!!bleedProblem());
+ el('bleed-toggle').title=all?'Remove the Bleed layer and put the background back on the frame':'';el('bleed').disabled=locked;
  el('bleed-field').className='field plain'+(bleedProblem()?' invalid':'');
- el('bleed-hint').textContent=!count?'':bleedProblem()||(!bleeds.length?'Adds a Bleed layer around each frame on the canvas. Drag images past the frame edge to fill it.':shown.length>1?'Bleed varies between frames: '+shown.map(formatLength).join(', ')+'.':bleeds.length<count?bleeds.length+' of '+count+' frames '+(bleeds.length===1?'has':'have')+' bleed.':'');
+ el('bleed-hint').textContent=!count?'':bleedProblem()||(!bleeds.length?'Adds a Bleed layer around each frame on the canvas. Drag images past the frame edge to fill it.':shown.length>1?'Bleed varies between frames: '+shown.map(formatLength).join(', ')+'.':bleeds.length<count?bleeds.length+' of '+count+' frames '+(bleeds.length===1?'has':'have')+' bleed.':'Change the amount to resize the bleed.');
  el('bleed-hint').className='hint'+(bleedProblem()?' error':'');
  el('marks-options').hidden=!marksOn();el('marks').disabled=locked;for(const id of ['mark-offset','mark-length','mark-weight'])el(id).disabled=locked;
  el('marks-error').textContent=marking;
@@ -100,8 +101,11 @@ el('mark-offset').oninput=()=>{marks.offset=readLength('mark-offset');clearResul
 el('mark-length').oninput=()=>{marks.length=readLength('mark-length');clearResult();refresh();};
 el('mark-weight').oninput=()=>{marks.weight=el('mark-weight').value===''?NaN:Number(el('mark-weight').value);clearResult();refresh();};
 el('marks').onchange=()=>{clearResult();refresh();};
-el('show-bleed').onclick=()=>{if(bleedProblem())return;parent.postMessage({pluginMessage:{type:'show-bleed',ids:frames.filter(f=>f.type==='FRAME').map(f=>f.id),bleed:bleedSetting*72/25.4}},'*');};
-el('hide-bleed').onclick=()=>parent.postMessage({pluginMessage:{type:'hide-bleed',ids:frames.filter(f=>f.type==='FRAME').map(f=>f.id)}},'*');
+const frameIds=()=>frames.filter(f=>f.type==='FRAME').map(f=>f.id),allBleed=()=>{const valid=frames.filter(f=>f.type==='FRAME');return valid.length>0&&valid.every(frameBleed);};
+const addBleed=()=>{if(bleedProblem())return;parent.postMessage({pluginMessage:{type:'show-bleed',ids:frameIds(),bleed:bleedSetting*72/25.4}},'*');};
+el('bleed-toggle').onclick=()=>{if(allBleed())parent.postMessage({pluginMessage:{type:'hide-bleed',ids:frameIds()}},'*');else addBleed();};
+// A committed amount (Enter or leaving the field) resizes bleed the selection already has.
+el('bleed').onchange=()=>{if(busy||downloadQueue)return;if(allBleed()&&frames.some(f=>f.type==='FRAME'&&frameBleed(f)!==bleedSetting))addBleed();};
 showLengths();
 for(const id of ['width','height'])el(id).oninput=()=>{dimensions[id]=el(id).value===''?null:Number(el(id).value)*(unit==='in'?25.4:1);el('auto-size').checked=false;clearResult();updateSize();};
 el('profile').onchange=async event=>{const generation=++profileRead;const mode=el('profile-mode').value;try{const file=event.target.files[0];if(!file)return;profile=null;refresh();if(file.size>5*1024*1024)throw new Error('ICC profile is too large.');const bytes=new Uint8Array(await file.arrayBuffer());if(generation!==profileRead)return;PrintCore.validateICC(bytes);const name=PrintCore.profileDescription(bytes);const entry=PROFILE_CATALOG.find(p=>p.id===mode);if(entry && name!==entry.name)throw new Error('Choose '+entry.name+'. This file contains '+(name||'an unnamed profile')+'.');if(entry){const encoded=encodeProfile(bytes);profiles[mode]=encoded;parent.postMessage({pluginMessage:{type:'save-profile',id:mode,encoded}},'*');}else{customProfile=bytes;customName=name||file.name;}chooseProfile();}catch(error){if(generation!==profileRead)return;status(error.message,'error');}refresh();};
@@ -114,7 +118,7 @@ window.onmessage=async event=>{
  if(msg.type==='selection'){if(busy||downloadQueue)return;frames=msg.frames.sort((a,b)=>a.name.localeCompare(b.name,undefined,{numeric:true}));
   // The plugin re-sends the selection after every export; only a real change clears the result.
   const key=JSON.stringify(frames.map(f=>[f.id,f.name,f.type,f.width,f.height,f.bleed]));if(key!==selectionKey){selectionKey=key;clearResult();
-   // The bleed field follows the selection when its frames share one bleed, so Update bleed starts from what is on the canvas.
+   // The bleed field follows the selection when its frames share one bleed, so editing it starts from what is on the canvas.
    const shown=[...new Set(frames.map(frameBleed).filter(b=>b))];if(shown.length===1&&shown[0]!==bleedSetting){bleedSetting=shown[0];showLengths();}}
   updateSize();renderFrames();refresh();}
  if(msg.type==='status')status(msg.text,'busy');
