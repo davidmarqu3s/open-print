@@ -1,1 +1,1 @@
-{"name":"open-print-figma","version":"0.2.10","private":true,"license":"AGPL-3.0-only","scripts":{"build":"node build.mjs","test":"node --test tests/*.test.cjs"},"engines":{"node":">=18"}}
+{"name":"open-print-figma","version":"0.1.0","private":true,"license":"AGPL-3.0-only","scripts":{"build":"node build.mjs","test":"node --test tests/*.test.cjs"},"engines":{"node":">=18"}}
