@@ -6,15 +6,17 @@ An open-source Figma plugin for exporting selected frames as a CMYK vector PDF w
 
 ## Install
 
-1. Download `open-print-v0.2.1.zip` from [Releases](https://github.com/davidmarqu3s/open-print/releases) and extract it to a permanent folder.
+1. Download `open-print-v0.2.2.zip` from [Releases](https://github.com/davidmarqu3s/open-print/releases) and extract it to a permanent folder.
 2. In Figma desktop, choose **Plugins → Development → Import plugin from manifest…** and select its `manifest.json`.
 3. Select your frames and run **Plugins → Development → Open Print**.
-4. Keep **Use frame size** enabled, or enter your final width and height in mm.
+4. Keep **Use frame size** enabled, or enter your final width and height. Use the **Units** picker to choose **mm** or **in**.
 5. Choose one of the 15 included profiles, **No profile** or **Custom CMYK profile…** and export. If needed, click **Save PDF** after conversion.
 
 Use the CMYK ICC profile supplied or approved by your printer. With **No profile**, Ghostscript converts colors to DeviceCMYK using its default CMYK conversion and no ICC OutputIntent is embedded. With a custom profile, it controls conversion and is embedded in the PDF. Different profiles produce different CMYK values.
 
 ## Print sizing
+
+Dimensions default to millimetres. Switching the **Units** picker converts the displayed dimensions without changing the physical print size. Inch input uses exactly 25.4 mm per inch; repeated unit switches do not accumulate display rounding.
 
 Figma frames contain no intrinsic physical-size metadata. Automatic inference uses Figma’s native PDF scale: **72 frame units per inch**, converted to mm and rounded to 0.01 mm. Every selected frame gets its own inferred PDF page size.
 
@@ -94,7 +96,7 @@ The manifest uses a local development identifier; obtain your own Figma-assigned
 
 ## Dependency sources
 
-- **Ghostscript 10.07.1:** AGPL. Complete corresponding source, including the original source tarball, is available in `open-print-v0.2.1-source.zip` alongside the binary release.
+- **Ghostscript 10.07.1:** AGPL. Complete corresponding source, including the original source tarball, is available in `open-print-v0.2.2-source.zip` alongside the binary release.
 - **WASM wrapper/build sources:** [J0shua-code/pdf-tools](https://github.com/J0shua-code/pdf-tools), pinned commit `51131feb82b37ad51687718889b788bf425ce594`. Its source files, scripts, patches and build configuration are included under `vendor/engine-source/`; generated duplicate engine binaries are omitted.
 - **pdf-lib 1.17.1:** MIT. Bundled UMD build and license; [upstream source](https://github.com/Hopding/pdf-lib/tree/v1.17.1).
 
