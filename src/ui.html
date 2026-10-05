@@ -75,11 +75,13 @@ button:focus-visible,.button:focus-within{outline:2px solid var(--selected);outl
 .file input{position:absolute;inset:0;opacity:0;cursor:default}
 .file input:disabled+span{opacity:.4}
 input:disabled,.select:disabled,.check input:disabled+span{opacity:.4}
-footer{flex:none;display:flex;flex-direction:column;gap:8px;padding:12px 16px 16px;border-top:1px solid var(--border)}
+footer{flex:none;border-top:1px solid var(--border)}
+/* The button keeps 16px above and below it, whatever sits in the footer. */
+.send{display:flex;flex-direction:column;gap:8px;padding:16px}
 .actions{display:flex;gap:8px}
 .actions .primary{flex:1}
 /* Export as is a setting, so a line separates it from the status and button below. */
-.option{display:flex;align-items:center;justify-content:space-between;min-height:24px;margin:-4px -16px 0;padding:0 16px 8px;border-bottom:1px solid var(--border)}
+.option{display:flex;align-items:center;justify-content:space-between;height:40px;padding:0 16px;border-bottom:1px solid var(--border)}
 .option label{color:var(--text2)}
 #status,#export-hint{display:flex;align-items:flex-start;gap:6px;white-space:pre-line;overflow-wrap:anywhere;color:var(--text2)}
 #status:empty,#export-hint:empty{display:none}
@@ -109,5 +111,5 @@ footer{flex:none;display:flex;flex-direction:column;gap:8px;padding:12px 16px 16
 <div id="custom-profile" hidden><label class="button secondary file"><input id="profile" type="file" accept=".icc,.icm"><span>Import ICC file…</span></label></div>
 <p class="hint" id="profile-hint"></p></section>
 </main>
-<footer><div class="option" id="export-options" hidden><label for="export-mode">Export as</label><select id="export-mode" class="compact" aria-label="Export as"><option value="combined">One multipage PDF</option><option value="separate">Individual PDFs</option></select></div><div id="status" role="status"></div><div id="export-hint"></div><div class="actions"><button id="cancel" class="secondary" hidden>Cancel</button><button id="export" class="primary" disabled>Export CMYK PDF</button></div></footer>
+<footer><div class="option" id="export-options" hidden><label for="export-mode">Export as</label><select id="export-mode" class="compact" aria-label="Export as"><option value="combined">One multipage PDF</option><option value="separate">Individual PDFs</option></select></div><div class="send"><div id="status" role="status"></div><div id="export-hint"></div><div class="actions"><button id="cancel" class="secondary" hidden>Cancel</button><button id="export" class="primary" disabled>Export CMYK PDF</button></div></div></footer>
 <script>/*BUNDLE*/</script></body></html>
