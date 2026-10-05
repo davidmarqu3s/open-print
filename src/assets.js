@@ -1,5 +1,5 @@
 const OpenPrintAssets=(()=>{
- const ENGINE_URL='https://raw.githubusercontent.com/J0shua-code/pdf-tools/51131feb82b37ad51687718889b788bf425ce594/web/ghostscript.wasm';
+ const ENGINE_URL='https://raw.githubusercontent.com/davidmarqu3s/open-print/436f731594ae50c359e70c03c0135e63cbd47cf8/vendor/ghostscript.wasm';
  const ENGINE_SIZE=17614404,ENGINE_SHA256='5a2b1b4daecc0003a70020106dc78c566a59d89524c502ad2a3eecbce0c7bf36';
  let engine=null;
  function decodeProfile(encoded){

@@ -10,7 +10,7 @@
   "documentAccess": "dynamic-page",
   "networkAccess": {
     "allowedDomains": [
-      "https://raw.githubusercontent.com/J0shua-code/pdf-tools/51131feb82b37ad51687718889b788bf425ce594/web/ghostscript.wasm"
+      "https://raw.githubusercontent.com/davidmarqu3s/open-print/436f731594ae50c359e70c03c0135e63cbd47cf8/vendor/ghostscript.wasm"
     ],
     "reasoning": "Downloads a verified conversion engine. Artwork and PDFs are processed locally inside the plugin and are never uploaded."
   }

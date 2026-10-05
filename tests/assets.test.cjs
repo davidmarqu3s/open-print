@@ -4,7 +4,7 @@ const fs=require('node:fs');
 const vm=require('node:vm');
 const {webcrypto,createHash}=require('node:crypto');
 const PDFLib=require('../vendor/pdf-lib.min.js');
-const ENGINE_URL='https://raw.githubusercontent.com/J0shua-code/pdf-tools/51131feb82b37ad51687718889b788bf425ce594/web/ghostscript.wasm';
+const ENGINE_URL='https://raw.githubusercontent.com/davidmarqu3s/open-print/436f731594ae50c359e70c03c0135e63cbd47cf8/vendor/ghostscript.wasm';
 const ENGINE_SIZE=17614404;
 const ENGINE_SHA256='5a2b1b4daecc0003a70020106dc78c566a59d89524c502ad2a3eecbce0c7bf36';
 function assets(fetch,cryptoValue){
@@ -59,6 +59,16 @@ test('engine download uses a fixed version and reuses successfully verified byte
   assert.deepEqual(Buffer.from(await module.loadEngine(signal)),original);
   assert.deepEqual(Buffer.from(await module.loadEngine(signal)),original);
   assert.equal(calls,1);
+});
+
+test('manifest allows network access to the engine URL only',()=>{
+  const manifest=JSON.parse(fs.readFileSync('manifest.json','utf8'));
+  assert.deepEqual(manifest.networkAccess.allowedDomains,[ENGINE_URL]);
+});
+
+test('engine URL points at the repository’s own copy of vendor/ghostscript.wasm',()=>{
+  assert.match(ENGINE_URL,/^https:\/\/raw\.githubusercontent\.com\/davidmarqu3s\/open-print\/[0-9a-f]{40}\/vendor\/ghostscript\.wasm$/);
+  assert.equal(createHash('sha256').update(fs.readFileSync('vendor/ghostscript.wasm')).digest('hex'),ENGINE_SHA256);
 });
 
 test('failed HTTP download is not cached and can be retried',async()=>{
