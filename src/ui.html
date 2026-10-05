@@ -1,3 +1,79 @@
 <!doctype html><html><head><meta charset="utf-8"><style>
-*{box-sizing:border-box}body{margin:0;padding:24px;font:13px/1.5 Inter,system-ui,sans-serif;background:var(--figma-color-bg,#fafafa);color:var(--figma-color-text,#202020)}h1{font-size:23px;letter-spacing:-.6px;margin:0}p{color:var(--figma-color-text-secondary,#666)}label{display:block;margin:14px 0 5px;font-weight:600}input,select{width:100%;padding:9px;border:1px solid #aaa;border-radius:5px;font:inherit;background:var(--figma-color-bg,#fff);color:inherit}input[type="checkbox"]{width:auto;margin-right:6px}.size{display:flex;gap:12px}.size>div{flex:1;min-width:0}.size>.unit{flex:0 0 68px}ol{padding-left:22px;max-height:115px;overflow:auto}li{padding:3px 0;overflow-wrap:anywhere}button{font:inherit;cursor:pointer;padding:10px 14px;border:0;border-radius:6px}#export{width:100%;background:#542276;color:white;margin-top:18px;font-weight:600}button:disabled{opacity:.45;cursor:default}#cancel{margin-top:8px;width:100%}#status{white-space:pre-line;margin-top:12px}small{color:var(--figma-color-text-secondary,#666)}a{color:inherit}
-</style></head><body><h1>Open Print</h1><strong>Selected frames</strong><ol id="frames"><li>Select frames in your document.</li></ol><small>Pages follow frame names, in numerical order.</small><label><input id="auto-size" type="checkbox" checked>Use frame size</label><small id="size-hint">Select frames to infer their print size.</small><div class="size"><div><label id="width-label" for="width">Width, mm</label><input id="width" type="number" min="10" max="2000" step=".01" ></div><div><label id="height-label" for="height">Height, mm</label><input id="height" type="number" min="10" max="2000" step=".01" ></div><div class="unit"><label for="units">Units</label><select id="units"><option value="mm">mm</option><option value="in">in</option></select></div></div><p>Artwork stays at its existing size, aligned to the top left. A smaller page crops the artwork.</p><label for="profile-mode">Color profile</label><select id="profile-mode"><option value="none">No profile</option><option value="custom">Custom CMYK profile…</option></select><div id="custom-profile" hidden><label for="profile">ICC file</label><input id="profile" type="file" accept=".icc,.icm"></div><p id="profile-hint"></p><button id="export" disabled>Export CMYK PDF</button><button id="cancel" hidden>Cancel conversion</button><div id="status" role="status"></div><script>/*BUNDLE*/</script></body></html>
+:root{--bg:var(--figma-color-bg,#fff);--bg2:var(--figma-color-bg-secondary,#f5f5f5);--bg-hover:var(--figma-color-bg-hover,#f5f5f5);--brand:var(--figma-color-bg-brand,#0d99ff);--brand-hover:var(--figma-color-bg-brand-hover,#007be5);--text:var(--figma-color-text,rgba(0,0,0,.9));--text2:var(--figma-color-text-secondary,rgba(0,0,0,.5));--text3:var(--figma-color-text-tertiary,rgba(0,0,0,.3));--onbrand:var(--figma-color-text-onbrand,#fff);--danger:var(--figma-color-text-danger,#dc3412);--warning:var(--figma-color-text-warning,#b86200);--success:var(--figma-color-text-success,#14ae5c);--border:var(--figma-color-border,#e6e6e6);--selected:var(--figma-color-border-selected,#0d99ff);--icon2:var(--figma-color-icon-secondary,rgba(0,0,0,.5));--disabled:var(--figma-color-bg-disabled,#d9d9d9);--ondisabled:var(--figma-color-text-ondisabled,#b3b3b3)}
+html.figma-dark{color-scheme:dark}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;display:flex;flex-direction:column;font:11px/16px Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;letter-spacing:.005em;background:var(--bg);color:var(--text);-webkit-font-smoothing:antialiased}
+main{flex:1;overflow-y:auto}
+section{padding:4px 16px 12px}
+section+section{border-top:1px solid var(--border)}
+.head{display:flex;align-items:center;justify-content:space-between;height:32px}
+h2{margin:0;font-size:11px;font-weight:600}
+.meta{color:var(--text2)}
+.hint{margin:8px 0 0;color:var(--text2)}
+.hint:empty,[hidden]{display:none!important}
+ol{list-style:none;margin:0 -8px;padding:0;max-height:128px;overflow-y:auto}
+li{display:flex;align-items:center;gap:8px;height:32px;padding:0 8px;border-radius:5px}
+li:hover{background:var(--bg-hover)}
+li svg{flex:none;color:var(--icon2)}
+li .name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+li .size{flex:none;color:var(--text2);font-variant-numeric:tabular-nums}
+li.invalid,li.invalid svg,li.invalid .size{color:var(--warning)}
+li.empty{height:auto;padding:12px 8px;color:var(--text2)}
+li.empty:hover{background:none}
+input,select,button{font:inherit;letter-spacing:inherit;color:inherit}
+.field{position:relative;display:flex;align-items:center;height:24px;border:1px solid transparent;border-radius:5px;background:var(--bg2)}
+.field:hover{border-color:var(--border)}
+.field:focus-within{border-color:var(--selected);outline:1px solid var(--selected);outline-offset:-2px}
+.field input{flex:1;min-width:0;height:100%;padding:0 4px 0 0;border:0;background:none;outline:none;font-variant-numeric:tabular-nums}
+.field input::placeholder{color:var(--text3)}
+.field .prefix{flex:none;width:24px;text-align:center;color:var(--text3)}
+.field .suffix{flex:none;padding-right:8px;color:var(--text3)}
+input[type=number]{-moz-appearance:textfield}input::-webkit-outer-spin-button,input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+.dims{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px}
+.check.below{margin-top:8px}
+select{appearance:none;-webkit-appearance:none;width:100%;height:24px;padding:0 24px 0 8px;border:1px solid transparent;border-radius:5px;background:var(--bg2) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='5' fill='none' stroke='%23888' stroke-width='1.2'%3E%3Cpath d='M.5.5 4 4 7.5.5'/%3E%3C/svg%3E") no-repeat right 8px center;text-overflow:ellipsis;cursor:default}
+select:hover{border-color:var(--border)}
+select:focus{border-color:var(--selected);outline:1px solid var(--selected);outline-offset:-2px}
+select.compact{width:auto;padding:0 20px 0 6px;background-color:transparent;background-position:right 6px center}
+select.compact:hover{background-color:var(--bg2);border-color:transparent}
+.check{display:flex;align-items:center;gap:8px;height:24px;cursor:default;user-select:none}
+.check input{appearance:none;-webkit-appearance:none;flex:none;width:12px;height:12px;margin:0;border:1px solid var(--text);border-radius:2px;background:none;display:grid;place-content:center}
+.check input:checked{border-color:var(--brand);background:var(--brand) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='6' fill='none' stroke='white' stroke-width='1.5'%3E%3Cpath d='M.75 3 3 5.25 7.25.75'/%3E%3C/svg%3E") no-repeat center}
+.check input:focus-visible{outline:2px solid var(--selected);outline-offset:1px}
+button,.button{display:inline-flex;align-items:center;justify-content:center;height:32px;padding:0 12px;border:0;border-radius:5px;font-weight:500;cursor:default;white-space:nowrap;text-decoration:none}
+.primary{background:var(--brand);color:var(--onbrand)}
+.primary:hover:not(:disabled){background:var(--brand-hover)}
+.primary:disabled{background:var(--disabled);color:var(--ondisabled)}
+.secondary{background:none;border:1px solid var(--border);color:var(--text)}
+.secondary:hover{background:var(--bg-hover)}
+button:focus-visible,.button:focus-within{outline:2px solid var(--selected);outline-offset:1px}
+.file{position:relative;width:100%;height:24px;margin-top:8px;overflow:hidden}
+.file input{position:absolute;inset:0;opacity:0;cursor:default}
+.file input:disabled+span{opacity:.4}
+input:disabled,select:disabled,.check input:disabled+span{opacity:.4}
+footer{flex:none;display:flex;flex-direction:column;gap:8px;padding:12px 16px 16px;border-top:1px solid var(--border)}
+.actions{display:flex;gap:8px}
+.actions .primary{flex:1}
+#status,#export-hint{display:flex;align-items:flex-start;gap:6px;white-space:pre-line;overflow-wrap:anywhere;color:var(--text2)}
+#status:empty,#export-hint:empty{display:none}
+#status:not(:empty)~#export-hint{display:none}
+#status.error{color:var(--danger)}
+#status.done{color:var(--success)}
+#status.busy::before{content:"";flex:none;width:12px;height:12px;margin-top:2px;border:1.5px solid var(--border);border-top-color:var(--brand);border-radius:50%;animation:spin .8s linear infinite}
+#status a{margin-left:auto;color:var(--figma-color-text-brand,#007be5);font-weight:500;text-decoration:none}
+#status a:hover{text-decoration:underline}
+@keyframes spin{to{transform:rotate(360deg)}}
+</style></head><body>
+<main>
+<section><div class="head"><h2>Frames</h2><span class="meta" id="frame-count"></span></div><ol id="frames"><li class="empty">Select one or more frames on the canvas.</li></ol><p class="hint">Pages are ordered by frame name.</p></section>
+<section><div class="head"><h2>Page size</h2><select id="units" class="compact" aria-label="Units"><option value="mm">mm</option><option value="in">in</option></select></div>
+<div class="dims"><label class="field" title="Width"><span class="prefix" aria-hidden="true">W</span><input id="width" type="number" min="10" max="2000" step=".01" aria-label="Width"><span class="suffix" id="width-unit">mm</span></label><label class="field" title="Height"><span class="prefix" aria-hidden="true">H</span><input id="height" type="number" min="10" max="2000" step=".01" aria-label="Height"><span class="suffix" id="height-unit">mm</span></label></div>
+<label class="check below"><input id="auto-size" type="checkbox" checked><span>Use frame size</span></label>
+<p class="hint" id="size-hint">Select frames to infer their print size.</p></section>
+<section><div class="head"><h2>Color profile</h2></div><select id="profile-mode" aria-label="Color profile"><option value="none">No profile</option><option value="custom">Custom CMYK profile…</option></select>
+<div id="custom-profile" hidden><label class="button secondary file"><input id="profile" type="file" accept=".icc,.icm"><span>Import ICC file…</span></label></div>
+<p class="hint" id="profile-hint"></p></section>
+</main>
+<footer><div id="status" role="status"></div><div id="export-hint"></div><div class="actions"><button id="cancel" class="secondary" hidden>Cancel</button><button id="export" class="primary" disabled>Export CMYK PDF</button></div></footer>
+<script>/*BUNDLE*/</script></body></html>
