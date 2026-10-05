@@ -46,7 +46,7 @@ function chooseProfile(invalidate=true){
  el('custom-profile').hidden=mode!=='custom'&&!!(profile||mode==='none');
  el('profile-hint').textContent=mode==='none'?'Exports CMYK using the default conversion. No ICC profile is embedded.':entry?(profile?'':'Import this ICC file. It is saved locally when Figma storage has space.'):'Choose your printer’s CMYK ICC profile. It will be embedded in the PDF.';
  el('profile-hint').hidden=!el('profile-hint').textContent;
- status(entry&&!profile?'Import '+entry.name+' to begin.':mode==='custom'&&!profile?'Choose a CMYK profile to begin.':'Ready to export.');refresh();
+ status(entry&&!profile?'Import '+entry.name+' to begin.':mode==='custom'&&!profile?'Choose a CMYK profile to begin.':'');refresh();
 }
 for(const group of [...new Set(PROFILE_CATALOG.map(p=>p.group))]){const optgroup=document.createElement('optgroup');optgroup.label=group;for(const entry of PROFILE_CATALOG.filter(p=>p.group===group)){const option=document.createElement('option');option.value=entry.id;option.textContent=entry.name;optgroup.append(option);}el('profile-mode').append(optgroup);}
 el('profile-mode').value=profiles.CoatedFOGRA39?'CoatedFOGRA39':customProfile?'custom':'none';
