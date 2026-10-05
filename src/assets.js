@@ -19,8 +19,7 @@ const OpenPrintAssets=(()=>{
   if(!response.ok)throw new Error('Could not download the conversion engine. Please try again.');
   const bytes=new Uint8Array(await response.arrayBuffer());
   if(bytes.length!==ENGINE_SIZE)throw new Error('The conversion engine download is incomplete. Please try again.');
-  const digest=new Uint8Array(await crypto.subtle.digest('SHA-256',bytes));
-  const hash=Array.from(digest,b=>b.toString(16).padStart(2,'0')).join('');
+  const hash=sha256(bytes);
   if(hash!==ENGINE_SHA256)throw new Error('The conversion engine could not be verified. Please try again.');
   engine=bytes;return bytes.slice();
  }

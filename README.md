@@ -6,7 +6,7 @@ An open-source Figma plugin for exporting selected frames as a CMYK vector PDF. 
 
 ## Install
 
-1. Download `open-print-v0.2.3.zip` from [Releases](https://github.com/davidmarqu3s/open-print/releases) and extract it to a permanent folder.
+1. Download `open-print-v0.2.4.zip` from [Releases](https://github.com/davidmarqu3s/open-print/releases) and extract it to a permanent folder.
 2. In Figma desktop, choose **Plugins → Development → Import plugin from manifest…** and select its `manifest.json`.
 3. Select your frames and run **Plugins → Development → Open Print**.
 4. Keep **Use frame size** enabled, or enter your final width and height. Use the **Units** picker to choose **mm** or **in**.
@@ -99,6 +99,7 @@ The manifest uses a local development identifier; obtain your own Figma-assigned
 
 - **Ghostscript 10.07.1:** AGPL. Complete corresponding source, including the original source tarball, is available in `open-print-v0.2.2-source.zip` alongside the binary release.
 - **WASM wrapper/build sources:** [J0shua-code/pdf-tools](https://github.com/J0shua-code/pdf-tools), pinned commit `51131feb82b37ad51687718889b788bf425ce594`. Its source files, scripts, patches and build configuration are included under `vendor/engine-source/`; generated duplicate engine binaries are omitted.
+- **js-sha256 0.11.1:** MIT. Bundled JavaScript SHA-256 verification avoids relying on Web Crypto in Figma’s sandbox; [upstream source](https://github.com/emn178/js-sha256/tree/v0.11.1).
 - **pdf-lib 1.17.1:** MIT. Bundled UMD build and license; [upstream source](https://github.com/Hopding/pdf-lib/tree/v1.17.1).
 
 To rebuild the engine, unpack the full source release. Inside `vendor/engine-source`, create `src` and extract `ghostscript-10.07.1.tar.gz` into it. Use the included Dockerfile or Emscripten 6.0.7 with the documented dependencies to run `scripts/build.sh`. Copy the resulting `dist/ghostscript.js` and `dist/ghostscript.wasm` to the plugin’s `vendor/` directory, then rebuild the plugin. The upstream build has not been rerun during this implementation.

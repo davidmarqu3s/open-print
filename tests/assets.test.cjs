@@ -2,14 +2,17 @@ const {test}=require('node:test');
 const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const vm=require('node:vm');
-const {webcrypto}=require('node:crypto');
+const {webcrypto,createHash}=require('node:crypto');
 const PDFLib=require('../vendor/pdf-lib.min.js');
 const ENGINE_URL='https://raw.githubusercontent.com/J0shua-code/pdf-tools/51131feb82b37ad51687718889b788bf425ce594/web/ghostscript.wasm';
 const ENGINE_SIZE=17614404;
 const ENGINE_SHA256='5a2b1b4daecc0003a70020106dc78c566a59d89524c502ad2a3eecbce0c7bf36';
-function assets(fetch){
-  const context={Uint8Array,ArrayBuffer,DataView,Error,Number,Promise,PDFLib,crypto:webcrypto,fetch,atob,AbortController};
+function assets(fetch,cryptoValue){
+  if(arguments.length<2) cryptoValue=webcrypto;
+  const context={Uint8Array,ArrayBuffer,DataView,Error,Number,Promise,PDFLib,crypto:cryptoValue,fetch,atob,AbortController};
+  context.self=context;
   vm.createContext(context);
+  if(fs.existsSync('vendor/sha256.js')) vm.runInContext(fs.readFileSync('vendor/sha256.js','utf8'),context);
   vm.runInContext(fs.readFileSync('src/assets.js','utf8'),context);
   return vm.runInContext('OpenPrintAssets',context);
 }
@@ -80,4 +83,42 @@ test('engine integrity mismatch is rejected before execution and remains retryab
 test('truncated engine is rejected',async()=>{
   const module=assets(async()=>response(new Uint8Array(32)));
   await assert.rejects(module.loadEngine(),/size|length|incomplete|verif/i);
+});
+
+for(const [label,cryptoValue] of [['without crypto.subtle',{}],['without crypto',undefined]]){
+  test('engine verifies and reuses valid bytes '+label,async()=>{
+    const original=fs.readFileSync('vendor/ghostscript.wasm');
+    let calls=0;
+    const module=assets(async()=>{calls++;return response(original);},cryptoValue);
+    assert.deepEqual(Buffer.from(await module.loadEngine()),original);
+    assert.deepEqual(Buffer.from(await module.loadEngine()),original);
+    assert.equal(calls,1);
+  });
+  test('engine rejects corrupted bytes and permits retry '+label,async()=>{
+    const original=fs.readFileSync('vendor/ghostscript.wasm');
+    const changed=Buffer.from(original);changed[changed.length-1]^=1;
+    let calls=0;
+    const module=assets(async()=>response(++calls===1?changed:original),cryptoValue);
+    await assert.rejects(module.loadEngine(),/integrity|verif|checksum|match/i);
+    assert.deepEqual(Buffer.from(await module.loadEngine()),original);
+    assert.equal(calls,2);
+  });
+}
+
+test('vendored SHA256 matches known vectors and the complete engine',()=>{
+  assert.ok(fs.existsSync('vendor/sha256.js'),'A SHA256 fallback must be bundled');
+  const context={Uint8Array,ArrayBuffer};
+  context.self=context;
+  vm.createContext(context);
+  vm.runInContext(fs.readFileSync('vendor/sha256.js','utf8'),context);
+  const sha256=vm.runInContext('sha256',context);
+  const vectors=[
+    ['', 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'],
+    ['abc', 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad'],
+    ['abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq', '248d6a61d20638b8e5c026930c3e6039a33ce45964ff2167f6ecedd419db06c1'],
+    ['a'.repeat(1000000), 'cdc76e5c9914fb9281a1c7e284d73e67f1809a48a497200e046d39ccc7112cd0']
+  ];
+  for(const [input,expected] of vectors) assert.equal(sha256(Uint8Array.from(Buffer.from(input))),expected);
+  const engine=fs.readFileSync('vendor/ghostscript.wasm');
+  assert.equal(sha256(Uint8Array.from(engine)),createHash('sha256').update(engine).digest('hex'));
 });
