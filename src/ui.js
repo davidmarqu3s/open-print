@@ -1,5 +1,5 @@
 const el=id=>document.getElementById(id);let frames=[],profile=null,profileName='',worker=null,busy=false,job=null,profileRead=0,customProfile=null,customName='',engineAbort=null;
-let unit='mm',dimensions={width:null,height:null};
+let unit='mm',dimensions={width:null,height:null},downloadUrls=[];
 const displayDimension=value=>value===null?'':unit==='in'?Math.round(value/25.4*1e6)/1e6:value;
 const profiles={...BUNDLED_PROFILES};
 const decodeProfile=OpenPrintAssets.decodeProfile;
@@ -10,7 +10,7 @@ const FRAME_ICON='<svg width="16" height="16" viewBox="0 0 16 16" fill="currentC
 const formatSize=size=>{const value=mm=>unit==='in'?Math.round(mm/25.4*100)/100:mm;return value(size.width)+' × '+value(size.height)+' '+unit;};
 function renderFrames(){el('frames').replaceChildren();if(!frames.length){const li=document.createElement('li');li.className='empty';li.textContent='Select one or more frames on the canvas.';el('frames').append(li);}for(const frame of frames){const valid=frame.type==='FRAME',li=document.createElement('li'),name=document.createElement('span'),size=document.createElement('span');li.className=valid?'':'invalid';li.innerHTML=valid?FRAME_ICON:WARNING_ICON;name.className='name';name.textContent=frame.name;name.title=frame.name;size.className='size';size.textContent=valid?formatSize(PrintCore.frameSize(frame.width,frame.height)):'Not a frame';li.append(name,size);el('frames').append(li);}}
 function sizeProblem(){if(el('auto-size').checked)return '';if(dimensions.width===null||dimensions.height===null)return 'Enter a width and height.';try{PrintCore.points(dimensions.width);PrintCore.points(dimensions.height);return '';}catch(error){return error.message;}}
-function refresh(){const invalid=frames.filter(f=>f.type!=='FRAME'),problem=sizeProblem();el('export').disabled=busy||(el('profile-mode').value!=='none'&&!profile)||!frames.length||invalid.length>0||!!problem;el('export').textContent=busy?'Exporting…':'Export CMYK PDF';el('export-hint').textContent=busy?'':!frames.length?'Select frames to export.':invalid.length?'Only frames can be exported. Deselect '+(invalid.length===1?'“'+invalid[0].name+'”':invalid.length+' layers')+'.':problem;el('frame-count').textContent=!frames.length?'':invalid.length?frames.length+' selected':frames.length+(frames.length===1?' page':' pages');el('cancel').hidden=!worker&&!engineAbort;el('profile').disabled=busy;el('profile-mode').disabled=busy;el('width').disabled=busy;el('height').disabled=busy;el('auto-size').disabled=busy;el('units').disabled=busy;}
+function refresh(){const invalid=frames.filter(f=>f.type!=='FRAME'),problem=sizeProblem();el('export').disabled=busy||(el('profile-mode').value!=='none'&&!profile)||!frames.length||invalid.length>0||!!problem;el('export').textContent=busy?'Exporting…':'Export CMYK PDF';el('export-hint').textContent=busy?'':!frames.length?'Select frames to export.':invalid.length?'Only frames can be exported. Deselect '+(invalid.length===1?'“'+invalid[0].name+'”':invalid.length+' layers')+'.':problem;el('frame-count').textContent=!frames.length?'':invalid.length?frames.length+' selected':frames.length+(frames.length===1?' page':' pages');el('cancel').hidden=!worker&&!engineAbort;el('profile').disabled=busy;el('profile-mode').disabled=busy;el('width').disabled=busy;el('height').disabled=busy;el('auto-size').disabled=busy;el('units').disabled=busy;el('export-options').hidden=frames.length<2;el('export-mode').disabled=busy;}
 function stop(){if(engineAbort){engineAbort.abort();engineAbort=null;}if(worker){worker.terminate();worker=null;}busy=false;job=null;refresh();parent.postMessage({pluginMessage:{type:'ready'}},'*');}
 function updateSize(){
  const valid=frames.filter(f=>f.type==='FRAME');
@@ -25,12 +25,13 @@ function updateSize(){
  el('size-hint').hidden=!el('size-hint').textContent;
  refresh();
 }
+el('export-mode').value='combined';el('export-mode').onchange=refresh;
 el('units').value='mm';
 el('units').onchange=()=>{unit=el('units').value;for(const id of ['width','height']){el(id+'-unit').textContent=unit;el(id).min=unit==='in'?10/25.4:10;el(id).max=unit==='in'?2000/25.4:2000;el(id).step=unit==='in'?'.001':'.01';el(id).value=displayDimension(dimensions[id]);}updateSize();renderFrames();};
 el('auto-size').onchange=updateSize;
 for(const id of ['width','height'])el(id).oninput=()=>{dimensions[id]=el(id).value===''?null:Number(el(id).value)*(unit==='in'?25.4:1);el('auto-size').checked=false;updateSize();};
 el('profile').onchange=async event=>{const generation=++profileRead;const mode=el('profile-mode').value;try{const file=event.target.files[0];if(!file)return;profile=null;refresh();if(file.size>5*1024*1024)throw new Error('ICC profile is too large.');const bytes=new Uint8Array(await file.arrayBuffer());if(generation!==profileRead)return;PrintCore.validateICC(bytes);const name=PrintCore.profileDescription(bytes);const entry=PROFILE_CATALOG.find(p=>p.id===mode);if(entry && name!==entry.name)throw new Error('Choose '+entry.name+'. This file contains '+(name||'an unnamed profile')+'.');if(entry){const encoded=encodeProfile(bytes);profiles[mode]=encoded;parent.postMessage({pluginMessage:{type:'save-profile',id:mode,encoded}},'*');}else{customProfile=bytes;customName=name||file.name;}chooseProfile();}catch(error){if(generation!==profileRead)return;status(error.message,'error');}refresh();};
-el('export').onclick=()=>{try{const width=dimensions.width,height=dimensions.height;const auto=el('auto-size').checked;const sizes=auto?frames.map(f=>PrintCore.frameSize(f.width,f.height)):null;if(sizes)for(const size of sizes){PrintCore.points(size.width);PrintCore.points(size.height);}else{PrintCore.points(width);PrintCore.points(height);}job={filename:frames[0].name+'.pdf',width,height,auto,sizes,unit,displayWidth:el('width').value,displayHeight:el('height').value,icc:profile?profile.slice():null,name:profileName};busy=true;refresh();status('Preparing frames…','busy');parent.postMessage({pluginMessage:{type:'export',ids:frames.map(f=>f.id)}},'*');}catch(error){status(error.message,'error');}};
+el('export').onclick=()=>{try{const width=dimensions.width,height=dimensions.height;const auto=el('auto-size').checked;const sizes=auto?frames.map(f=>PrintCore.frameSize(f.width,f.height)):null;if(sizes)for(const size of sizes){PrintCore.points(size.width);PrintCore.points(size.height);}else{PrintCore.points(width);PrintCore.points(height);}for(const url of downloadUrls)URL.revokeObjectURL(url);downloadUrls=[];job={individual:frames.length>1&&el('export-mode').value==='individual',filenames:frames.map(f=>f.name+'.pdf'),filename:frames[0].name+'.pdf',width,height,auto,sizes,unit,displayWidth:el('width').value,displayHeight:el('height').value,icc:profile?profile.slice():null,name:profileName};busy=true;refresh();status('Preparing frames…','busy');parent.postMessage({pluginMessage:{type:'export',ids:frames.map(f=>f.id)}},'*');}catch(error){status(error.message,'error');}};
 el('cancel').onclick=()=>{stop();status('Conversion cancelled.');};
 window.onmessage=async event=>{
  const msg=event.data.pluginMessage;if(!msg)return;
@@ -44,10 +45,22 @@ window.onmessage=async event=>{
   const pdf=await merged.save();if(job!==current)return;status('Loading conversion engine…','busy');const downloadAbort=new AbortController();engineAbort=downloadAbort;refresh();const downloadTimer=setTimeout(()=>downloadAbort.abort(),60000);let wasm;try{wasm=await OpenPrintAssets.loadEngine(downloadAbort.signal);}finally{clearTimeout(downloadTimer);}if(job!==current)return;engineAbort=null;status('Converting colors to CMYK…','busy');
   const url=URL.createObjectURL(new Blob([WORKER_SOURCE],{type:'text/javascript'}));worker=new Worker(url);URL.revokeObjectURL(url);refresh();
   worker.onerror=event=>{stop();status('Conversion could not start: '+event.message,'error');};
-  worker.onmessage=async event=>{if(job!==current)return;worker.terminate();worker=null;refresh();try{if(event.data.error)throw new Error(event.data.error);status(current.icc?'Setting print size and embedding profile…':'Setting print size…','busy');const output=await PrintCore.finish(event.data.bytes,current.icc,current.width,current.height,current.name,current.sizes);if(job!==current)return;const url=URL.createObjectURL(new Blob([output],{type:'application/pdf'}));const a=document.createElement('a');a.href=url;a.download=current.filename;a.textContent='Save PDF';el('status').replaceChildren(document.createTextNode('Export complete.'),a);el('status').className='done';a.click();setTimeout(()=>URL.revokeObjectURL(url),60000);stop();}catch(error){stop();status(error.message,'error');}};
+  worker.onmessage=async event=>{if(job!==current)return;worker.terminate();worker=null;refresh();try{if(event.data.error)throw new Error(event.data.error);status(current.icc?'Setting print size and embedding profile…':'Setting print size…','busy');const outputs=await prepareDownloads(event.data.bytes,current);if(job!==current)return;const links=document.createElement('div');links.className='downloads';for(const output of outputs){const url=URL.createObjectURL(new Blob([output.bytes],{type:'application/pdf'}));const a=document.createElement('a');a.href=url;a.download=output.filename;a.textContent=outputs.length===1?'Save PDF':output.filename;links.append(a);downloadUrls.push(url);a.click();}el('status').replaceChildren(document.createTextNode('Export complete.'),links);el('status').className='done';stop();}catch(error){stop();status(error.message,'error');}};
   worker.postMessage({wasm,pdf,icc:current.icc?current.icc.slice():null},[wasm.buffer,pdf.buffer]);
  }catch(error){if(job!==current)return;stop();status(error.message,'error');}}
  };
+async function prepareDownloads(bytes,current){
+ if(!current.individual)return [{filename:current.filename,bytes:await PrintCore.finish(bytes,current.icc,current.width,current.height,current.name,current.sizes)}];
+ const converted=await PDFLib.PDFDocument.load(bytes);
+ if(converted.getPageCount()!==current.filenames.length)throw new Error('The exported page count does not match the selected frames. Please try again.');
+ const outputs=[];
+ for(let i=0;i<converted.getPageCount();i++){
+  const single=await PDFLib.PDFDocument.create();const [page]=await single.copyPages(converted,[i]);single.addPage(page);
+  const sizes=current.auto?[current.sizes[i]]:null;
+  outputs.push({filename:current.filenames[i],bytes:await PrintCore.finish(await single.save(),current.icc,current.width,current.height,current.name,sizes)});
+ }
+ return outputs;
+}
 function chooseProfile(invalidate=true){
  if(invalidate)++profileRead;const mode=el('profile-mode').value;const entry=PROFILE_CATALOG.find(p=>p.id===mode);
  if(entry){profile=profiles[mode]?decodeProfile(profiles[mode]):null;profileName=entry.name;}
