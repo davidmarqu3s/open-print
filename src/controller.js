@@ -22,12 +22,14 @@ function inspect(node,issues,frame,found={effects:false,raster:false}) {
 const multiply=(a,b)=>[0,1].map(r=>[a[r][0]*b[0][0]+a[r][1]*b[1][0],a[r][0]*b[0][1]+a[r][1]*b[1][1],a[r][0]*b[0][2]+a[r][1]*b[1][2]+a[r][2]]);
 function invert(m){const d=m[0][0]*m[1][1]-m[0][1]*m[1][0],a=m[1][1]/d,b=-m[0][1]/d,c=-m[1][0]/d,e=m[0][0]/d;return [[a,b,-(a*m[0][2]+b*m[1][2])],[c,e,-(c*m[0][2]+e*m[1][2])]];}
 // Covers the copied layer with a PNG of the original and hides the copy, keeping its place in any auto layout. Returns the image's ppi at print size.
-async function swapForImage(original,copy,topLevel) {
+async function swapForImage(original,copy,topLevel,state) {
  const bounds=topLevel?original.absoluteBoundingBox:original.absoluteRenderBounds,target=topLevel?copy.absoluteBoundingBox:copy.absoluteRenderBounds;
  if(!bounds||!target||!bounds.width||!bounds.height)return Infinity;
  const k=Math.min(TARGET_PPI/72,MAX_IMAGE_EDGE/Math.max(bounds.width,bounds.height));
  const png=await original.exportAsync({format:'PNG',constraint:{type:'SCALE',value:k},useAbsoluteBounds:topLevel});
- const fill={type:'IMAGE',imageHash:figma.createImage(png).hash,scaleMode:'FILL'};
+ // Until Figma has decoded a new image it paints the fill as one flat colour, so wait for it and check the PDF later.
+ const created=figma.createImage(png),size=await created.getSizeAsync();state.images.push(size);
+ const fill={type:'IMAGE',imageHash:created.hash,scaleMode:'FILL'};
  if(topLevel){for(const child of [...copy.children])child.remove();copy.effects=[];copy.strokes=[];copy.fills=[fill];return Math.round(72*k);}
  const image=figma.createRectangle(),parent=copy.parent;
  parent.insertChild(parent.children.indexOf(copy)+1,image);
@@ -35,16 +37,27 @@ async function swapForImage(original,copy,topLevel) {
  image.name=copy.name;image.resize(target.width,target.height);
  // The image shares the copy's parent, so this places it at the copy's absolute render bounds whatever the parent's transform.
  image.relativeTransform=multiply(multiply(copy.relativeTransform,invert(copy.absoluteTransform)),[[1,0,target.x],[0,1,target.y]]);
- image.fills=[fill];image.blendMode=copy.blendMode;copy.opacity=0;
+ image.fills=[fill];image.blendMode=copy.blendMode;
+ // Clearing the effects stops Figma baking a bitmap of the hidden layer.
+ copy.opacity=0;copy.effects=[];
  return Math.round(72*k);
 }
+// Whether Figma's PDF embeds an image of each expected size. Figma writes image dictionaries uncompressed.
+const RETRIES=10,RETRY_MS=300;
+function hasImages(pdf,expected) {
+ if(!expected.length)return true;
+ let text='';for(let i=0;i<pdf.length;i+=65536)text+=String.fromCharCode.apply(null,pdf.subarray(i,i+65536));
+ const found=(text.match(/<<[^<>]*\/Subtype\s*\/Image[^<>]*>>/g)||[]).map(d=>[Number((d.match(/\/Width\s+(\d+)/)||[])[1]),Number((d.match(/\/Height\s+(\d+)/)||[])[1])]);
+ // Matching the aspect ratio still passes if Figma resamples the image.
+ return expected.every(size=>found.some(([w,h])=>w&&h&&Math.abs(w/h-size.width/size.height)<0.01*size.width/size.height));
+}
 // Walks the original and its copy together. Instances in the copy are detached first, because layers can't be added inside them.
-async function rasterise(original,copy,topLevel=false) {
+async function rasterise(original,copy,state,topLevel=false) {
  if(original.visible===false||!containsRaster(original))return Infinity;
- if(hasRaster(original))return swapForImage(original,copy,topLevel);
+ if(hasRaster(original))return swapForImage(original,copy,topLevel,state);
  if(copy.type==='INSTANCE')copy=copy.detachInstance();
  const originals=original.children,copies=[...copy.children];let ppi=Infinity;
- for(let i=0;i<originals.length;i++)ppi=Math.min(ppi,await rasterise(originals[i],copies[i]));
+ for(let i=0;i<originals.length;i++)ppi=Math.min(ppi,await rasterise(originals[i],copies[i],state));
  return ppi;
 }
 // Returns the PDF and the factor its page must be scaled down by. The copy never touches the original.
@@ -52,7 +65,13 @@ async function exportFrame(node,found) {
  if(!found.effects)return {pdf:await node.exportAsync({format:'PDF'}),scale:1};
  const scale=Math.min(TARGET_PPI/EFFECT_PPI+0.02,MAX_EFFECT_EDGE/(2*Math.max(node.width,node.height)));
  let copy=null,copied=false;
- try{copy=node.clone();figma.currentPage.appendChild(copy);copy.rescale(scale);copied=true;const ppi=Math.min(Math.round(EFFECT_PPI*scale),found.raster?await rasterise(node,copy,true):Infinity);return {pdf:await copy.exportAsync({format:'PDF'}),scale,ppi};}
+ try{
+  copy=node.clone();figma.currentPage.appendChild(copy);copy.rescale(scale);copied=true;
+  const state={images:[]},ppi=Math.min(Math.round(EFFECT_PPI*scale),found.raster?await rasterise(node,copy,state,true):Infinity);
+  let pdf=await copy.exportAsync({format:'PDF'});
+  for(let attempt=0;!hasImages(pdf,state.images);attempt++){if(attempt===RETRIES)throw new Error('Figma didn’t finish preparing the image. Try exporting again.');await new Promise(resolve=>setTimeout(resolve,RETRY_MS));pdf=await copy.exportAsync({format:'PDF'});}
+  return {pdf,scale,ppi};
+ }
  catch(error){if(found.raster)throw new Error('Couldn’t render the noise or texture in '+node.name+(copied?': '+(error.message||error):'. Figma needs to make a temporary copy of the frame, so check you can edit this file.'));return {pdf:await node.exportAsync({format:'PDF'}),scale:1,ppi:EFFECT_PPI};}
  finally{if(copy&&!copy.removed)copy.remove();}
 }

@@ -1,7 +1,7 @@
 const {test}=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');const PDFLib=require('../vendor/pdf-lib.min.js');
 function profile(){const p=Buffer.alloc(132);p.writeUInt32BE(132);p.write('CMYK',16);p.write('acsp',36);return p;}
 test('finishing keeps vector artwork at natural size and embeds exact profile',async()=>{const ctx={PDFLib,Uint8Array,DataView,Number,Error};vm.createContext(ctx);vm.runInContext(fs.readFileSync('src/core.js','utf8'),ctx);const doc=await PDFLib.PDFDocument.create();doc.addPage([907,1276]).drawRectangle({x:12,y:34,width:100,height:50,color:PDFLib.cmyk(.1,.2,.3,.4)});const original=await doc.save();const output=await ctx.PrintCore.finish(original,profile(),320,450,'Test');const result=await PDFLib.PDFDocument.load(output);assert.equal(result.getPage(0).getWidth(),320*72/25.4);assert.equal(result.getPage(0).getHeight(),450*72/25.4);const intent=result.catalog.lookup(PDFLib.PDFName.of('OutputIntents'),PDFLib.PDFArray).lookup(0,PDFLib.PDFDict);const embedded=intent.lookup(PDFLib.PDFName.of('DestOutputProfile'),PDFLib.PDFRawStream);assert.equal(embedded.dict.lookup(PDFLib.PDFName.of('N'),PDFLib.PDFNumber).asNumber(),4);assert.deepEqual(Buffer.from(PDFLib.decodePDFRawStream(embedded).decode()),profile());const contents=result.getPage(0).node.Contents();const streams=contents.asArray().map(ref=>result.context.lookup(ref));const text=streams.map(s=>Buffer.from(PDFLib.decodePDFRawStream(s).decode()).toString()).join('\n');assert(text.includes('100'));assert(text.includes('50'));assert(text.includes('0.1 0.2 0.3 0.4 k'));assert(!text.includes(' rg'));});
-function controller(nodes){const messages=[];const figma={showUI(){},on(){},currentPage:{selection:nodes},getNodeByIdAsync:async id=>nodes.find(n=>n.id===id),ui:{postMessage:m=>messages.push(m)}};const context={figma,__html__:'',Set};vm.createContext(context);vm.runInContext(fs.readFileSync('src/controller.js','utf8'),context);return {figma,messages};}
+function controller(nodes){const messages=[];const figma={showUI(){},on(){},currentPage:{selection:nodes},getNodeByIdAsync:async id=>nodes.find(n=>n.id===id),ui:{postMessage:m=>messages.push(m)}};const context={figma,__html__:'',Set,setTimeout};vm.createContext(context);vm.runInContext(fs.readFileSync('src/controller.js','utf8'),context);return {figma,messages};}
 test('gradients no longer block export, including text segment gradients',async()=>{let exports=0;const n={id:'1',type:'FRAME',parent:{},name:'Sheet',width:200,height:100,fills:[{type:'GRADIENT_ANGULAR'}],children:[{type:'TEXT',name:'Gradient text',characters:'a',getStyledTextSegments:()=>[{fills:[{type:'GRADIENT_LINEAR'}]}]}],exportAsync:async()=>{exports++;return new Uint8Array([1]);}};const {figma,messages}=controller([n]);await figma.ui.onmessage({type:'export',ids:['1']});assert.equal(exports,1);assert.equal(messages.at(-1).type,'pdfs');assert.deepEqual([...messages.at(-1).scales],[1]);});
 function effectFrame(effects,size={width:200,height:100},cloneFails=false){
  const log={original:0,copy:[],appended:0};
@@ -32,7 +32,7 @@ test('preflight issues name their frame and layer',async()=>{const n={id:'1',typ
 test('cancel stops a running export before it posts PDFs',async()=>{let release;const nodes=['1','2'].map(id=>({id,type:'FRAME',parent:{},name:id,width:10,height:10,exportAsync:()=>new Promise(resolve=>{release=()=>resolve(new Uint8Array([1]));})}));const {figma,messages}=controller(nodes);const running=figma.ui.onmessage({type:'export',ids:['1','2']});await new Promise(r=>setImmediate(r));await figma.ui.onmessage({type:'cancel'});release();await running;assert(!messages.some(m=>m.type==='pdfs'));assert.equal(messages.filter(m=>m.type==='status').length,1);});
 test('show-layer zooms to the layer without selecting it',async()=>{const layer={id:'5',type:'RECTANGLE'};const {figma}=controller([]);let shown;figma.getNodeByIdAsync=async id=>id==='5'?layer:null;figma.viewport={scrollAndZoomIntoView:nodes=>shown=nodes};await figma.ui.onmessage({type:'show-layer',id:'5'});assert.equal(shown.length,1);assert.equal(shown[0],layer);assert.deepEqual(figma.currentPage.selection,[]);});
 // A small node tree for the noise and texture tests. Copies live 2x larger so the test can tell original and copy bounds apart.
-function rasterTree({frameEffects=[],childEffects=[{type:'NOISE',visible:true}],childType='RECTANGLE',inInstance=false,size=100,cloneFails=false}={}){
+function rasterTree({frameEffects=[],childEffects=[{type:'NOISE',visible:true}],childType='RECTANGLE',inInstance=false,size=100,cloneFails=false,placeholderExports=0}={}){
  const log={pngs:[],images:0,detached:0,inserted:[]};
  const box=(x,y,w,h)=>({x,y,width:w,height:h});
  function node(props,k){const n={visible:true,effects:[],opacity:1,blendMode:'NORMAL',relativeTransform:[[1,0,10*k],[0,1,10*k]],absoluteTransform:[[1,0,10*k],[0,1,10*k]],...props};if(n.children)for(const c of n.children)c.parent=n;n.insertChild=(i,c)=>{n.children.splice(i,0,c);c.parent=n;log.inserted.push(c);};n.remove=()=>{const s=n.parent.children;s.splice(s.indexOf(n),1);};return n;}
@@ -44,8 +44,8 @@ function rasterTree({frameEffects=[],childEffects=[{type:'NOISE',visible:true}],
   return node({id:'1',type:'FRAME',parent:{},name:'Poster',width:200,height:100,effects:frameEffects,fills:[],strokes:[],children:[holder],absoluteBoundingBox:box(0,0,200*k,100*k),absoluteRenderBounds:box(0,0,200*k,100*k),exportAsync:async o=>{log.pngs.push({who:k,...o});return new Uint8Array([o.format==='PDF'?1:3]);}},k);
  }
  const frame=tree(1);
- frame.clone=()=>{if(cloneFails)throw new Error('View-only file');const copy=tree(2);log.copy=copy;copy.rescale=()=>{};copy.exportAsync=async o=>{log.copyPdf=o.format;return new Uint8Array([2]);};copy.remove=()=>{copy.removed=true;};return copy;};
- const c=controller([frame]);c.figma.currentPage.appendChild=()=>{};c.figma.createImage=()=>({hash:'img'+(++log.images)});
+ frame.clone=()=>{if(cloneFails)throw new Error('View-only file');const copy=tree(2);log.copy=copy;copy.rescale=()=>{};copy.exportAsync=async o=>{log.copyPdf=o.format;log.copyExports=(log.copyExports||0)+1;return Buffer.from(log.copyExports>placeholderExports?log.images?'<< /Type /XObject /Subtype /Image /Height 100 /Width 200 >>':'':'');};copy.remove=()=>{copy.removed=true;};return copy;};
+ const c=controller([frame]);c.figma.currentPage.appendChild=()=>{};c.figma.createImage=()=>({hash:'img'+(++log.images),getSizeAsync:async()=>({width:400,height:200})});
  c.figma.createRectangle=()=>({type:'RECTANGLE',resize(w,h){this.size=[w,h];}});
  return {frame,log,...c};
 }
@@ -57,7 +57,7 @@ test('noise and texture layers are swapped for a 300 ppi image in the copy, abov
   assert.equal(log.pngs.length,1);assert.equal(log.pngs[0].who,1,'PNG comes from the original');assert.equal(log.pngs[0].format,'PNG');assert.equal(log.pngs[0].constraint.value,300/72);
   const card=log.copy.children[0];assert.deepEqual(card.children.map(c=>c.name),['Grain','Grain','Title']);
   const image=card.children[1];assert.equal(image.fills[0].imageHash,'img1');assert.equal(image.layoutPositioning,'ABSOLUTE');assert.deepEqual(image.size,[200,200]);
-  assert.deepEqual(JSON.parse(JSON.stringify(image.relativeTransform)),[[1,0,20],[0,1,20]]);assert.equal(card.children[0].opacity,0);
+  assert.deepEqual(JSON.parse(JSON.stringify(image.relativeTransform)),[[1,0,20],[0,1,20]]);assert.equal(card.children[0].opacity,0);assert.equal(card.children[0].effects.length,0);
   assert.equal(frame.children[0].children.length,2);assert.equal(frame.children[0].children[0].opacity,1);
  }
 });
@@ -69,3 +69,7 @@ test('hidden noise is ignored and unsupported effects inside a rasterised layer 
  t=rasterTree({frameEffects:[{type:'TEXTURE',visible:true}],childEffects:[{type:'GLASS',visible:true}]});await t.figma.ui.onmessage({type:'export',ids:['1']});assert.equal(t.messages.at(-1).type,'pdfs');
 });
 test('noise cannot fall back to Figma’s own export when no copy can be made',async()=>{const {figma,messages}=rasterTree({cloneFails:true});await figma.ui.onmessage({type:'export',ids:['1']});assert.equal(messages.at(-1).type,'error');assert.match(messages.at(-1).text,/noise or texture in Poster/);});
+test('noise images Figma has not finished preparing are waited for, and never exported as a flat colour',async()=>{
+ let t=rasterTree({placeholderExports:2});await t.figma.ui.onmessage({type:'export',ids:['1']});assert.equal(t.messages.at(-1).type,'pdfs',t.messages.at(-1).text);assert.equal(t.log.copyExports,3);
+ t=rasterTree({placeholderExports:99});await t.figma.ui.onmessage({type:'export',ids:['1']});assert.equal(t.messages.at(-1).type,'error');assert.match(t.messages.at(-1).text,/didn’t finish preparing/);assert(t.log.copy.removed);
+});
