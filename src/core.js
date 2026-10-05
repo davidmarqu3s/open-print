@@ -25,10 +25,61 @@ var PrintCore = {
   }
   return '';
  },
+ // PDF path state is separate from q/Q graphics state. A paint or n clears it.
+ cleanContent(bytes,state={active:false}) {
+  if(state.unsupported)return bytes;const originalActive=state.active;
+  let text='';for(let i=0;i<bytes.length;i+=8192)text+=String.fromCharCode(...bytes.subarray(i,i+8192));
+  const removed=[],space=c=>/[\x00\t\n\f\r ]/.test(c),delimiter=c=>/[()[\]<>\/%]/.test(c);let depth=0;
+  for(let i=0;i<text.length;){
+   const c=text[i];if(space(c)){i++;continue;}
+   if(c==='%'){while(i<text.length&&!/[\r\n]/.test(text[i]))i++;continue;}
+   if(c==='('){let nesting=1;i++;while(i<text.length&&nesting){if(text[i]==='\\'){i+=2;continue;}if(text[i]==='(')nesting++;if(text[i]===')')nesting--;i++;}continue;}
+   if(c==='<'&&text[i+1]!=='<'){i++;while(i<text.length&&text[i]!=='>')i++;i++;continue;}
+   if(c==='['||text.slice(i,i+2)==='<<'){depth++;i+=c==='['?1:2;continue;}
+   if(c===']'||text.slice(i,i+2)==='>>'){depth--;i+=c===']'?1:2;continue;}
+   if(c==='/'){i++;while(i<text.length&&!space(text[i])&&!delimiter(text[i]))i++;continue;}
+   if(delimiter(c)){i++;continue;}
+   const start=i;while(i<text.length&&!space(text[i])&&!delimiter(text[i]))i++;
+   const token=text.slice(start,i);if(depth)continue;
+   // Never tokenize inline-image binary data. The converter emits external images.
+   if(token==='BI'){state.active=originalActive;state.unsupported=true;return bytes;}
+   if(token==='h'&&!state.active)removed.push(start);
+   if(['m','l','c','v','y','re'].includes(token))state.active=true;
+   if(['S','s','f','F','f*','B','B*','b','b*','n'].includes(token))state.active=false;
+  }
+  if(!removed.length)return bytes;
+  let result='',start=0;for(const offset of removed){result+=text.slice(start,offset);start=offset+1;}result+=text.slice(start);
+  return Uint8Array.from(result,c=>c.charCodeAt(0));
+ },
+ cleanPaths(doc) {
+  const {PDFName,PDFRawStream,PDFArray,PDFRef,decodePDFRawStream}=PDFLib;
+  const uses=new Map();
+  for(const page of doc.getPages()){
+   const contents=page.node.get(PDFName.of('Contents'));if(!contents)continue;
+   const object=doc.context.lookup(contents),refs=object instanceof PDFArray?object.asArray():[contents];
+   for(const ref of refs)if(ref instanceof PDFRef)uses.set(ref.toString(),(uses.get(ref.toString())||0)+1);
+  }
+  const replace=(ref,state,clone=false)=>{
+   const stream=doc.context.lookup(ref);if(!(stream instanceof PDFRawStream))return ref;
+   const bytes=decodePDFRawStream(stream).decode(),cleaned=this.cleanContent(bytes,state);if(cleaned===bytes)return ref;
+   const fixed=doc.context.flateStream(cleaned);
+   for(const [key,value] of stream.dict.entries())if(!['Length','Filter','DecodeParms'].includes(key.decodeText()))fixed.dict.set(key,value);
+   if(ref instanceof PDFRef){if(clone)return doc.context.register(fixed);doc.context.assign(ref,fixed);return ref;}return fixed;
+  };
+  for(const [ref,object] of doc.context.enumerateIndirectObjects())if(object instanceof PDFRawStream&&object.dict.get(PDFName.of('Subtype'))===PDFName.of('Form'))replace(ref,{active:false});
+  for(const page of doc.getPages()){
+   const contents=page.node.get(PDFName.of('Contents'));if(!contents)continue;
+   const array=doc.context.lookup(contents),state={active:false};
+   const clean=ref=>replace(ref,state,ref instanceof PDFRef&&uses.get(ref.toString())>1);
+   if(array instanceof PDFArray)page.node.set(PDFName.of('Contents'),doc.context.obj(array.asArray().map(clean)));
+   else page.node.set(PDFName.of('Contents'),clean(contents));
+  }
+ },
  async finish(bytes,icc,width,height,profileName,pageSizes) {
   if(icc) this.validateICC(icc);
   const {PDFDocument,PDFName,PDFString}=PDFLib;
   const doc=await PDFDocument.load(bytes);
+  this.cleanPaths(doc);
   const pages=doc.getPages();
   if(pageSizes && pageSizes.length!==pages.length)throw new Error('Frame and PDF page counts do not match.');
   const sizes=pages.map((page,i)=>{const size=pageSizes?pageSizes[i]:{width,height};return {width:this.points(size.width),height:this.points(size.height)};});
