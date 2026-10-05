@@ -1,0 +1,17 @@
+{
+  "PSOcoated_v3": "vendor/profiles/PSOcoated_v3.icc",
+  "ISOcoated_v2_eci": "vendor/profiles/ISOcoated_v2_eci.icc",
+  "eciCMYK_v2": "vendor/profiles/eciCMYK_v2.icc",
+  "ISOcoated_v2_300_eci": "vendor/profiles/ISOcoated_v2_300_eci.icc",
+  "CoatedFOGRA39": "vendor/profiles/CoatedFOGRA39.icc",
+  "USWebCoatedSWOP": "vendor/profiles/USWebCoatedSWOP.icc",
+  "CoatedGRACoL2006": "vendor/profiles/CoatedGRACoL2006.icc",
+  "WebCoatedSWOP2006Grade3": "vendor/profiles/WebCoatedSWOP2006Grade3.icc",
+  "WebCoatedSWOP2006Grade5": "vendor/profiles/WebCoatedSWOP2006Grade5.icc",
+  "JapanColor2011Coated": "vendor/profiles/JapanColor2011Coated.icc",
+  "JapanColor2001Coated": "vendor/profiles/JapanColor2001Coated.icc",
+  "JapanColor2003WebCoated": "vendor/profiles/JapanColor2003WebCoated.icc",
+  "JapanColor2001Uncoated": "vendor/profiles/JapanColor2001Uncoated.icc",
+  "JapanColor2002Newspaper": "vendor/profiles/JapanColor2002Newspaper.icc",
+  "JapanWebCoated": "vendor/profiles/JapanWebCoated.icc"
+}
