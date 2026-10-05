@@ -31,7 +31,7 @@ el('units').onchange=()=>{unit=el('units').value;for(const id of ['width','heigh
 el('auto-size').onchange=updateSize;
 for(const id of ['width','height'])el(id).oninput=()=>{dimensions[id]=el(id).value===''?null:Number(el(id).value)*(unit==='in'?25.4:1);el('auto-size').checked=false;updateSize();};
 el('profile').onchange=async event=>{const generation=++profileRead;const mode=el('profile-mode').value;try{const file=event.target.files[0];if(!file)return;profile=null;refresh();if(file.size>5*1024*1024)throw new Error('ICC profile is too large.');const bytes=new Uint8Array(await file.arrayBuffer());if(generation!==profileRead)return;PrintCore.validateICC(bytes);const name=PrintCore.profileDescription(bytes);const entry=PROFILE_CATALOG.find(p=>p.id===mode);if(entry && name!==entry.name)throw new Error('Choose '+entry.name+'. This file contains '+(name||'an unnamed profile')+'.');if(entry){const encoded=encodeProfile(bytes);profiles[mode]=encoded;parent.postMessage({pluginMessage:{type:'save-profile',id:mode,encoded}},'*');}else{customProfile=bytes;customName=name||file.name;}chooseProfile();}catch(error){if(generation!==profileRead)return;status(error.message,'error');}refresh();};
-el('export').onclick=()=>{try{const width=dimensions.width,height=dimensions.height;const auto=el('auto-size').checked;const sizes=auto?frames.map(f=>PrintCore.frameSize(f.width,f.height)):null;if(sizes)for(const size of sizes){PrintCore.points(size.width);PrintCore.points(size.height);}else{PrintCore.points(width);PrintCore.points(height);}stopDownloadQueue();for(const url of downloadUrls)URL.revokeObjectURL(url);downloadUrls=[];job={individual:frames.length>1&&el('export-mode').value!=='combined',separate:frames.length>1&&el('export-mode').value==='separate',filenames:frames.map(f=>f.name+'.pdf'),filename:frames[0].name+'.pdf',width,height,auto,sizes,unit,displayWidth:el('width').value,displayHeight:el('height').value,icc:profile?profile.slice():null,name:profileName};busy=true;refresh();status('Preparing frames…','busy');parent.postMessage({pluginMessage:{type:'export',ids:frames.map(f=>f.id)}},'*');}catch(error){status(error.message,'error');}};
+el('export').onclick=()=>{try{const width=dimensions.width,height=dimensions.height;const auto=el('auto-size').checked;const sizes=auto?frames.map(f=>PrintCore.frameSize(f.width,f.height)):null;if(sizes)for(const size of sizes){PrintCore.points(size.width);PrintCore.points(size.height);}else{PrintCore.points(width);PrintCore.points(height);}stopDownloadQueue();for(const url of downloadUrls)URL.revokeObjectURL(url);downloadUrls=[];job={individual:frames.length>1&&el('export-mode').value!=='combined',filenames:frames.map(f=>f.name+'.pdf'),filename:frames[0].name+'.pdf',width,height,auto,sizes,unit,displayWidth:el('width').value,displayHeight:el('height').value,icc:profile?profile.slice():null,name:profileName};busy=true;refresh();status('Preparing frames…','busy');parent.postMessage({pluginMessage:{type:'export',ids:frames.map(f=>f.id)}},'*');}catch(error){status(error.message,'error');}};
 el('cancel').onclick=()=>{stop();status('Conversion cancelled.');};
 window.onmessage=async event=>{
  const msg=event.data.pluginMessage;if(!msg)return;
@@ -53,20 +53,10 @@ window.onmessage=async event=>{
   status('Converting colors to CMYK…','busy');
   await PrintShading.toCMYK(merged,async bytes=>{const output=await convert(bytes);if(job!==current)throw new Error('Conversion cancelled.');return output;});
   if(job!==current)return;const converted=await convert(await merged.save());if(job!==current)return;
-  status(current.icc?'Setting print size and embedding profile…':'Setting print size…','busy');const outputs=await prepareDownloads(converted,current);if(job!==current)return;stop();showDownloads(outputs,current.separate);
+  status(current.icc?'Setting print size and embedding profile…':'Setting print size…','busy');const outputs=await prepareDownloads(converted,current);if(job!==current)return;stop();showDownloads(outputs);
   if(msg.effectPpi&&msg.effectPpi<300){const note=document.createElement('span');note.className='note';note.textContent='Shadows and blurs are '+msg.effectPpi+' ppi, below the 300 ppi print target.';el('status').append(note);}
  }catch(error){if(job!==current)return;stop();status(error.message,'error');}}
  };
-function packageDownloads(outputs){
- if(outputs.length===1)return {...outputs[0],type:'application/pdf'};
- const files=Object.create(null),used=new Set();
- for(const output of outputs){
-  const original=output.filename.replace(/[\\/\x00-\x1f]/g,'_');let name=original,n=2;
-  while(used.has(name.toLowerCase()))name=original.replace(/\.pdf$/i,'')+' ('+(n++)+').pdf';
-  used.add(name.toLowerCase());files[name]=output.bytes;
- }
- return {filename:outputs[0].filename.replace(/[\\/\x00-\x1f]/g,'_').replace(/\.pdf$/i,'')+'.zip',bytes:fflate.zipSync(files,{level:0}),type:'application/zip'};
-}
 function stopDownloadQueue(){
  const q=downloadQueue;if(!q)return;
  downloadQueue=null;clearTimeout(q.timer);clearTimeout(q.watchdog);
@@ -94,9 +84,9 @@ function startDownloadQueue(anchors,message){
  };
  window.addEventListener('blur',q.blur);window.addEventListener('focus',q.focus);refresh();request();
 }
-function showDownloads(outputs,separate=false){
+function showDownloads(outputs){
  stopDownloadQueue();
- if(separate&&outputs.length>1){
+ if(outputs.length>1){
   const links=document.createElement('div');links.className='downloads';links.hidden=true;const used=new Set(),anchors=[];
   for(const output of outputs){
    const original=output.filename.replace(/[\\/\x00-\x1f]/g,'_');let name=original,n=2;
@@ -110,10 +100,10 @@ function showDownloads(outputs,separate=false){
   startDownloadQueue(anchors,message);return anchors;
  }
 
- const output=packageDownloads(outputs),links=document.createElement('div');links.className='downloads';links.hidden=true;
- const url=URL.createObjectURL(new Blob([output.bytes],{type:output.type})),a=document.createElement('a');
- a.href=url;a.download=output.filename;a.textContent=outputs.length===1?'Save PDF':'Save ZIP';links.append(a);downloadUrls.push(url);
- el('status').replaceChildren(document.createTextNode(outputs.length===1?'PDF ready.':'ZIP ready.'),links);el('status').className='done';
+ const output=outputs[0],links=document.createElement('div');links.className='downloads';links.hidden=true;
+ const url=URL.createObjectURL(new Blob([output.bytes],{type:'application/pdf'})),a=document.createElement('a');
+ a.href=url;a.download=output.filename;a.textContent='Save PDF';links.append(a);downloadUrls.push(url);
+ el('status').replaceChildren(document.createTextNode('PDF ready.'),links);el('status').className='done';
  a.click();return [a];
 }
 async function prepareDownloads(bytes,current){

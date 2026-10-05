@@ -119,7 +119,6 @@ The manifest uses Open Print’s Figma-assigned plugin ID. If you publish your o
 
 - **Ghostscript 10.07.1:** AGPL. The complete corresponding source, including the original source tarball, is in `open-print-v0.2.2-source.zip`, attached to the [v0.2.2 release](https://github.com/davidmarqu3s/open-print/releases/tag/v0.2.2). The engine hasn’t changed since, so that archive still applies to the current release.
 - **WASM wrapper and build sources:** [J0shua-code/pdf-tools](https://github.com/J0shua-code/pdf-tools) at pinned commit `51131feb82b37ad51687718889b788bf425ce594`. Its source files, scripts, patches and build configuration are in `vendor/engine-source/`; duplicate generated engine binaries are left out.
-- **fflate 0.8.2:** MIT. Used for ZIP packaging; [upstream source](https://github.com/101arrowz/fflate/tree/v0.8.2).
 - **js-sha256 0.11.1:** MIT. Verifies SHA-256 checksums in JavaScript, so the plugin doesn’t depend on Web Crypto in Figma’s sandbox; [upstream source](https://github.com/emn178/js-sha256/tree/v0.11.1).
 - **pdf-lib 1.17.1:** MIT. Bundled UMD build and license; [upstream source](https://github.com/Hopding/pdf-lib/tree/v1.17.1).
 
