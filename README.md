@@ -6,8 +6,6 @@ Open Print is an open-source Figma plugin that exports selected frames as a vect
 
 The plugin code is licensed under GNU AGPL v3. Bundled third-party ICC profiles keep their own licences, set by their suppliers; see [Colour profiles](#colour-profiles).
 
-> **Experimental.** The automated tests and the full export pipeline pass, and both a single PDF and consecutive individual PDFs have been saved successfully in Figma desktop. Save to a writable local folder: a read-only destination, such as some Google Drive folders, can fail silently after the Save dialog closes.
-
 ## Install
 
 1. Download the `open-print-v….zip` file from the [latest release](https://github.com/davidmarqu3s/open-print/releases/latest) and extract it to a folder you’ll keep.
