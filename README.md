@@ -32,11 +32,11 @@ Figma frames carry no physical size, so the plugin uses Figma’s native PDF sca
 
 For example, a 907 × 1276 frame becomes 319.97 × 450.14 mm. If you meant 320 × 450 mm, enter that. When a frame is within 0.5 mm of a standard size (A0–A6, DL, B1–B5, SRA3, 50 × 70 cm and 70 × 100 cm posters, Letter, Legal, Tabloid or a business card), a **Use A3**-style button enters the exact size for you. Typing a size turns off automatic sizing and applies your size to every page. Manual sizes persist when the selection changes.
 
-Artwork stays at its native size, aligned to the top left. Changing the page size moves the PDF page edges: a larger page adds space and a smaller one crops. Exporting never resizes or edits your Figma layers; only **Show bleed** changes the file (see below). Frames with shadows or blurs are exported from a temporary scaled copy that is deleted straight away (see below).
+Artwork stays at its native size, aligned to the top left. Changing the page size moves the PDF page edges: a larger page adds space and a smaller one crops. Exporting never resizes or edits your Figma layers; only **Add bleed** changes the file (see below). Frames with shadows or blurs are exported from a temporary scaled copy that is deleted straight away (see below).
 
 ## Bleed and crop marks
 
-Bleed is built on the canvas, so you can see it before exporting. Select frames, enter a bleed (3 mm by default) and click **Show bleed**. Each frame gets a locked **Bleed** layer at the bottom, sized to the trim plus the bleed on every side, and the frame’s background fills move onto it. **Clip content** is turned off, so images placed past the frame edge show exactly as they will print. The dashed red outline marks the bleed edge and is never exported. **Hide** moves the background back onto the frame, removes the layer and restores clipping.
+Bleed is built on the canvas, so you can see it before exporting. Select frames, enter a bleed (3 mm by default) and click **Add bleed**. Change the amount and click **Update bleed** to resize it. Each frame gets a locked **Bleed** layer at the bottom, sized to the trim plus the bleed on every side, and the frame’s background fills move onto it. **Clip content** is turned off, so images placed past the frame edge show exactly as they will print. The dashed red outline marks the bleed edge and is never exported. **Remove** moves the background back onto the frame, removes the layer and restores clipping.
 
 The frame is always the trim size. Anything beyond the bleed edge is cut from the PDF.
 
