@@ -9,6 +9,7 @@ gs_sha256='2fc74362f9be6fae1b0a65d38fdcfd4f0b518cc3b07c5581fb661eb4d2e15251'
 rm -rf release && mkdir -p release/open-print/dist release/open-print/vendor/profiles release/source/vendor
 cp manifest.json README.md LICENSE release/open-print/
 cp dist/code.js dist/ui.html release/open-print/dist/
+cp vendor/pdf-lib-LICENSE.md vendor/sha256-LICENSE.txt release/open-print/vendor/
 cp vendor/profiles/README.md vendor/profiles/SHA256SUMS.txt release/open-print/vendor/profiles/
 (cd release && zip -qr "open-print-v$version.zip" open-print)
 

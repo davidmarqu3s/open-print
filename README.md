@@ -66,7 +66,7 @@ Every pull request runs the same checks on GitHub Actions. See [docs/development
 
 The plugin is licensed under [GNU AGPL v3](LICENSE).
 
-- **Ghostscript 10.07.1:** AGPL. The complete corresponding source is in the `open-print-v…-source.zip` file attached to every [release](https://github.com/davidmarqu3s/open-print/releases).
+- **Ghostscript 10.07.1:** AGPL. The complete corresponding source is in the `open-print-v…-source.zip` file attached to every [release](https://github.com/davidmarqu3s/open-print/releases). It is the unmodified [Ghostscript 10.07.1 source](https://github.com/ArtifexSoftware/ghostpdl-downloads/releases/download/gs10071/ghostscript-10.07.1.tar.gz) plus the build files in `vendor/engine-source/`.
 - **WASM build:** based on [J0shua-code/pdf-tools](https://github.com/J0shua-code/pdf-tools) at commit `51131fe`; its sources are in `vendor/engine-source/`.
 - **pdf-lib 1.17.1** and **js-sha256 0.11.1:** MIT.
 - **ICC profiles:** each keeps its supplier’s own terms. See [profile sources and notices](vendor/profiles/README.md).
