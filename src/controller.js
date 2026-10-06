@@ -39,9 +39,15 @@ async function bleedOfNode(node) {
  if(drawn>0)bleed*=bleedOf(main)/drawn;
  return bleed>0.001?Math.round(bleed*1000)/1000:0;
 }
+// A frame turned on the canvas prints as it looks there, so its page takes the turned width and height.
+function shown(n) {
+ if(!n.rotation)return {width:n.width,height:n.height};
+ const [[a,c],[b,d]]=n.relativeTransform,round=v=>Math.round(v*1e4)/1e4;
+ return {width:round(Math.abs(a)*n.width+Math.abs(c)*n.height),height:round(Math.abs(b)*n.width+Math.abs(d)*n.height)};
+}
 // The main component is offered as the place to add bleed, unless it comes from a library.
 async function describe(n) {
- const item={id:n.id,name:n.name,width:n.width,height:n.height,type:n.type,bleed:0};
+ const item={id:n.id,name:n.name,...shown(n),type:n.type,bleed:0};
  if(!PRINTABLE.includes(n.type))return item;
  try{item.bleed=await bleedOfNode(n);if(n.type==='INSTANCE'){const main=await n.getMainComponentAsync();if(main&&!main.remote)item.mainId=main.id;}}catch(error){/* Show the node without bleed. */}
  return item;
@@ -125,14 +131,17 @@ async function rasterise(original,copy,state,topLevel=false) {
 // A frame with bleed is exported from a copy inside a clipping frame of trim plus bleed, without the bleed layer's guide outline or the trim outline.
 async function exportFrame(node,found,bleed=0,print=1) {
  if(!found.effects&&!bleed)return {pdf:await node.exportAsync({format:'PDF'}),scale:1};
- const width=node.width+2*bleed,height=node.height+2*bleed;
+ const outer=shown(node),width=outer.width+2*bleed,height=outer.height+2*bleed;
  const scale=found.effects?Math.min((TARGET_PPI/EFFECT_PPI+0.02)*print,MAX_EFFECT_EDGE/(2*Math.max(width,height))):1;
  let copy=null,wrapper=null,copied=false;
  try{
   copy=node.clone();
   if(bleed){
    wrapper=figma.createFrame();wrapper.name=node.name;wrapper.fills=[];wrapper.clipsContent=true;figma.currentPage.appendChild(wrapper);wrapper.resize(width,height);
-   wrapper.appendChild(copy);copy.x=bleed;copy.y=bleed;const guide=await bleedLayerOf(copy),trim=await layerOf(copy,trimLayer);if(guide)guide.strokes=[];if(trim)trim.visible=false;
+   wrapper.appendChild(copy);
+   // A turned copy keeps its turn, with the corner it shows top left at the bleed corner.
+   if(!copy.rotation){copy.x=bleed;copy.y=bleed;}
+   else{const [[a,c],[b,d]]=copy.relativeTransform,xs=[0,a*node.width,c*node.height,a*node.width+c*node.height],ys=[0,b*node.width,d*node.height,b*node.width+d*node.height];copy.relativeTransform=[[a,c,bleed-Math.min(...xs)],[b,d,bleed-Math.min(...ys)]];}const guide=await bleedLayerOf(copy),trim=await layerOf(copy,trimLayer);if(guide)guide.strokes=[];if(trim)trim.visible=false;
   }else figma.currentPage.appendChild(copy);
   const target=wrapper||copy;if(scale!==1)target.rescale(scale);copied=true;
   const state={images:[],print},ppi=found.effects?Math.min(Math.round(EFFECT_PPI*scale/print),found.raster?await rasterise(node,copy,state,true):Infinity):null;
@@ -252,7 +261,7 @@ async function runExport(ids,id,prints) {
   const issues=[],effects=nodes.map(n=>inspect(n,issues,n));
   if(issues.length){if(current())figma.ui.postMessage({type:'error',text:issues.slice(0,5).map(i=>i.text).join('\n'),issues});return;}
   const pdfs=[],sizes=[],bleeds=[],scales=[],ppi=[];
-  for(let i=0;i<nodes.length;i++){if(!current())return;figma.ui.postMessage({type:'status',text:'Exporting frame '+(i+1)+' of '+nodes.length+'…'});sizes.push({width:nodes[i].width,height:nodes[i].height});bleeds.push(await bleedOfNode(nodes[i]));const print=Array.isArray(prints)&&prints[i]>0&&prints[i]<=100?prints[i]:1;const result=await exportFrame(nodes[i],effects[i],bleeds[i],print);pdfs.push(result.pdf);scales.push(result.scale);if(result.ppi)ppi.push(result.ppi);}
+  for(let i=0;i<nodes.length;i++){if(!current())return;figma.ui.postMessage({type:'status',text:'Exporting frame '+(i+1)+' of '+nodes.length+'…'});sizes.push(shown(nodes[i]));bleeds.push(await bleedOfNode(nodes[i]));const print=Array.isArray(prints)&&prints[i]>0&&prints[i]<=100?prints[i]:1;const result=await exportFrame(nodes[i],effects[i],bleeds[i],print);pdfs.push(result.pdf);scales.push(result.scale);if(result.ppi)ppi.push(result.ppi);}
   if(current())figma.ui.postMessage({type:'pdfs',pdfs,sizes,bleeds,scales,effectPpi:ppi.length?Math.min(...ppi):null});
  }catch(error){if(current())figma.ui.postMessage({type:'error',text:error.message||String(error)});}
 }
