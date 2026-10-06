@@ -11,10 +11,10 @@ test('preflight measures image resolution at frame size for fill, fit, crop and 
  // 200 × 400 px filling 100 × 100 pt: width decides, 2 px per pt. Cropping to half the image doubles its size, so 1 px per pt.
  assert.equal(ppi['Photo a'],144);assert.equal(ppi['Photo b'],576);assert.equal(ppi['Photo c'],72);assert.equal(ppi['Photo d'],144);
 });
-test('preflight reports text size, black, distance to the edge, missing fonts and truncation',async()=>{
- const text={id:'5',type:'TEXT',name:'Caption',x:4,y:300,width:100,height:10,hasMissingFont:true,textTruncation:'ENDING',getStyledTextSegments:()=>[{fontSize:5,fills:[{type:'SOLID',color:{r:0.05,g:0.05,b:0.05}}]},{fontSize:9,fills:[{type:'SOLID',color:{r:0,g:0,b:0}}]}]};
+test('preflight reports text size, black, and distance to the edge',async()=>{
+ const text={id:'5',type:'TEXT',name:'Caption',x:4,y:300,width:100,height:10,getStyledTextSegments:()=>[{fontSize:5,fills:[{type:'SOLID',color:{r:0.05,g:0.05,b:0.05}}]},{fontSize:9,fills:[{type:'SOLID',color:{r:0,g:0,b:0}}]}]};
  const [f]=(await findings(sheet([text]))).filter(f=>f.kind==='text');
- assert.equal(f.size,5);assert.equal(f.rich,5);assert.equal(f.pure,9);assert.equal(f.gap,4);assert.equal(f.missingFont,true);assert.equal(f.truncated,true);
+ assert.equal(f.size,5);assert.equal(f.rich,5);assert.equal(f.pure,9);assert.equal(f.gap,4);assert.equal('missingFont' in f,false);
 });
 test('artwork touching the edge of a frame without bleed needs bleed, and the bleed and trim layers are skipped',async()=>{
  const photo={id:'7',type:'RECTANGLE',name:'Background photo',x:0,y:0,width:595,height:400,fills:[]};

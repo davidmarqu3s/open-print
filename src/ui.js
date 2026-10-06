@@ -69,9 +69,7 @@ function preflightIssues(frame){
   if(f.kind==='stroke'&&f.weight*scale<PREFLIGHT.hairline)add('warning',pt(f.weight)+' hairline',f);
   if(f.kind==='bleed')add('warning','Needs bleed',f);
   if(f.kind!=='text')continue;
-  if(f.missingFont)add('error','Missing font',f);
-  if(f.truncated)add('warning','Truncated text',f);
-  if(f.size!==null&&f.size*scale<PREFLIGHT.smallText)add('warning',pt(f.size)+' text',f);
+   if(f.size!==null&&f.size*scale<PREFLIGHT.smallText)add('warning',pt(f.size)+' text',f);
   // Without Pure black as 100% K, #000000 prints in four inks too.
   const rich=Math.min(f.rich===null?Infinity:f.rich,f.pure!==null&&!el('pure-black').checked?f.pure:Infinity);
   if(rich*scale<PREFLIGHT.richText)add('warning','Rich black '+pt(rich)+' text',f);

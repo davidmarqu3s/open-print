@@ -220,7 +220,7 @@ async function preflightFrame(frame) {
    for(const run of textRuns(node)){if(typeof run.fontSize!=='number')continue;size=Math.min(size,run.fontSize);const black=blackOf(run.fills);if(black==='rich')rich=Math.min(rich,run.fontSize);if(black==='pure')pure=Math.min(pure,run.fontSize);}
    // How close the text comes to the trim. Text crossing the edge counts as touching it.
    const gap=inside?Math.max(0,Math.min(bounds.x-box.x,bounds.y-box.y,box.x+box.width-bounds.x-bounds.width,box.y+box.height-bounds.y-bounds.height)):null;
-   add('text',node,{size:size<Infinity?size:null,rich:rich<Infinity?rich:null,pure:pure<Infinity?pure:null,gap,missingFont:!!node.hasMissingFont,truncated:node.textTruncation==='ENDING'});
+   add('text',node,{size:size<Infinity?size:null,rich:rich<Infinity?rich:null,pure:pure<Infinity?pure:null,gap});
   }
   for(const child of node.children||[])await walk(child,rasterised);
  }
