@@ -28,7 +28,7 @@ To start a design at a standard size, click **+** next to **Frames** and pick a 
 
 ## Bleed and crop marks
 
-Click **+** next to **Bleed** to add 3 mm of bleed. Each frame gets a locked **Bleed** layer holding its background, and **Clip content** is turned off, so you can drag images past the edge and see exactly what will print. A locked **Trim** layer on top outlines the original frame edge; it doesn’t print. The amount then appears: change it and press Return to resize the bleed. Click **−** to remove it and put everything back. The frame is always the trim size.
+Click **+** next to **Bleed** to add 3 mm of bleed, rounded up to whole pixels (9 px, 3.18 mm). Each frame gets a locked **Bleed** layer holding its background, and **Clip content** is turned off, so you can drag images past the edge and see exactly what will print. A locked **Trim** layer on top outlines the original frame edge; it doesn’t print. The amount then appears: change it and press Return to resize the bleed. Click **−** to remove it and put everything back. The frame is always the trim size.
 
 Components take bleed the same way, and their instances follow it. An instance can’t take bleed of its own, because Figma doesn’t allow new layers in instances, so the plugin offers to select its main component instead.
 

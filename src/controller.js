@@ -188,7 +188,9 @@ figma.ui.onmessage=async msg=>{
    const bleed=Number(msg.bleed);if(msg.type==='show-bleed'&&!(bleed>0&&bleed<=1000))throw new Error('Enter a bleed between 0 and 1000 units.');
    const nodes=[];for(const nodeId of Array.isArray(msg.ids)?msg.ids:[]){const n=await figma.getNodeByIdAsync(nodeId);if(n&&(n.type==='FRAME'||n.type==='COMPONENT'))nodes.push(n);}
    if(!nodes.length)throw new Error('Select one or more frames or components.');
-   for(const n of nodes)if(msg.type==='show-bleed')showBleed(n,bleed);else hideBleed(n);
+   // Bleed rounds up to whole pixels so the bleed edge sits on Figma's pixel grid, like the frame (3 mm is 9 px, not 8.5).
+   const whole=Math.ceil(bleed-1e-6);
+   for(const n of nodes)if(msg.type==='show-bleed')showBleed(n,whole);else hideBleed(n);
   }catch(error){figma.ui.postMessage({type:'error',text:error.message||String(error)});}
   await selection();return;
  }
