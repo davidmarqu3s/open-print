@@ -4,7 +4,7 @@ Notable changes to Open Print. Each release’s notes are also used on GitHub Re
 
 ## Unreleased
 
-## 0.1.0 – 2026-10-05
+## 0.1.0 – 2026-10-06
 
 The first public release. It replaces all earlier private test releases.
 
@@ -19,3 +19,4 @@ The first public release. It replaces all earlier private test releases.
 - Warnings for low-resolution images, and removal of leftover RGB colour spaces.
 - Figma-style dropdown menus.
 - The conversion engine is downloaded from this repository and checked against a fixed checksum.
+- Third-party licence notices ship inside the plugin and alongside it, and every release carries the complete Ghostscript source.
