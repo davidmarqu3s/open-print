@@ -79,3 +79,12 @@ test('effects on a frame scaled up for a custom page size still render at 300 pp
  await figma.ui.onmessage({type:'export',ids:['1'],prints:[2]});const msg=messages.at(-1);
  assert(log.copy[0][1]*144>=600,'scale reaches 300 ppi at twice the size');assert.equal(msg.scales[0],log.copy[0][1]);assert(msg.effectPpi>=300&&msg.effectPpi<310);
 });
+test('a whole-pixel A4 frame fills an exact A4 page, artwork stretched to the trim',async()=>{const ctx={PDFLib,Uint8Array,DataView,Number,Error};vm.createContext(ctx);vm.runInContext(fs.readFileSync('src/core.js','utf8'),ctx);const pt=mm=>mm*72/25.4;
+ for(const bleed of [0,3]){const doc=await PDFLib.PDFDocument.create(),b=pt(bleed);doc.addPage([595+2*b,842+2*b]).drawRectangle({x:0,y:0,width:595+2*b,height:842+2*b,color:PDFLib.cmyk(0,0,0,1)});
+  const result=await PDFLib.PDFDocument.load(await ctx.PrintCore.finish(await doc.save(),null,null,null,'',[{width:210,height:297}],{bleeds:[bleed]})),page=result.getPage(0),trim=page.getTrimBox();
+  assert(Math.abs(trim.width-pt(210))<1e-6&&Math.abs(trim.height-pt(297))<1e-6);
+  const text=page.node.Contents().asArray().map(ref=>Buffer.from(PDFLib.decodePDFRawStream(result.context.lookup(ref)).decode()).toString()).join('\n'),cms=[...text.matchAll(/([-\d.]+) ([-\d.]+) ([-\d.]+) ([-\d.]+) ([-\d.]+) ([-\d.]+) cm/g)].map(m=>m.slice(1).map(Number));
+  // Translate then scale: artwork corners land on the bleed corners.
+  const [t,s]=cms;const map=(x,y)=>[t[4]+s[0]*x,t[5]+s[3]*y];const [x0,y0]=map(0,0),[x1,y1]=map(595+2*b,842+2*b);
+  for(const [a,e] of [[x0,trim.x-b],[y0,trim.y-b],[x1,trim.x+trim.width+b],[y1,trim.y+trim.height+b]])assert(Math.abs(a-e)<0.01,a+' vs '+e);}
+});

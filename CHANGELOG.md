@@ -9,8 +9,9 @@ Notable changes to Open Print. Each release’s notes are also used on GitHub Re
 - Bleed and crop marks are added with a + button, and their settings show once added.
 - A custom page size scales the artwork to fit, centred, instead of cropping it.
 - Components and instances can be exported, with bleed and crop marks. Instances take their bleed from the main component.
-- A + button next to Frames creates frames at exact paper sizes: A0 to A6, DL, business card, posters, Letter and Tabloid.
+- A + button next to Frames creates frames at exact paper sizes: A0 to A6, DL, business card, posters, Letter and Tabloid. With frames selected, it resizes them instead, keeping each one landscape or portrait.
 - Adding bleed outlines the original frame edge on the canvas. The outline doesn’t print.
+- Frames at a standard size rounded to whole pixels, like Figma’s A4 (595 × 842), show and export at the exact paper size (210 × 297 mm).
 - Bleed sits on whole pixels on the canvas (3 mm shows as 9 px), and the PDF still gets exactly 3 mm.
 - Preflight checks the selected frames as you work, like InDesign’s: low-resolution images, missing bleed, text near the edge, small or rich-black text and hairlines.
 
