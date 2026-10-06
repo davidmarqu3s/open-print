@@ -1,4 +1,7 @@
 figma.showUI(__html__, {width:320,height:560,themeColors:true});
+// The window is resizable vertically. Its height is clamped and remembered between sessions.
+const UI_WIDTH=320,uiHeight=h=>Math.min(1600,Math.max(360,Math.round(Number(h)||560)));
+(async()=>{try{const h=await figma.clientStorage.getAsync('open-print-height');if(h)figma.ui.resize(UI_WIDTH,uiHeight(h));}catch(error){/* Keep the default height. */}})();
 let exportRun=Promise.resolve(),exportId=0,profileSave=Promise.resolve();
 // Show bleed adds this layer at the bottom of a frame. It holds the frame's background, sized to trim plus bleed, and its plugin data records the bleed in frame units.
 const BLEED_KEY='open-print-bleed',BLEED_GUIDE={type:'SOLID',color:{r:1,g:0.2,b:0.2}};
@@ -126,6 +129,7 @@ async function runExport(ids,id) {
 figma.ui.onmessage=async msg=>{
  if(msg.type==='load-profiles'){try{figma.ui.postMessage({type:'profiles',profiles:await figma.clientStorage.getAsync('open-print-profiles')||{}});}catch(error){figma.ui.postMessage({type:'profiles',profiles:{}});}return;}
  if(msg.type==='save-profile'){try{if(typeof msg.id!=='string'||msg.id.length>100||typeof msg.encoded!=='string'||msg.encoded.length>7*1024*1024)throw new Error('Invalid profile');profileSave=profileSave.catch(()=>{}).then(async()=>{const profiles=await figma.clientStorage.getAsync('open-print-profiles')||{};profiles[msg.id]=msg.encoded;await figma.clientStorage.setAsync('open-print-profiles',profiles);});await profileSave;}catch(error){figma.ui.postMessage({type:'profile-storage-error'});}return;}
+ if(msg.type==='resize'||msg.type==='resize-end'){const h=uiHeight(msg.height);figma.ui.resize(UI_WIDTH,h);if(msg.type==='resize-end')try{await figma.clientStorage.setAsync('open-print-height',h);}catch(error){/* The height is kept for this session only. */}return;}
  if(msg.type==='ready'){selection();return;}
  if(msg.type==='show-layer'){try{const node=await figma.getNodeByIdAsync(String(msg.id));if(node&&node.type!=='PAGE'&&node.type!=='DOCUMENT')figma.viewport.scrollAndZoomIntoView([node]);}catch(error){/* The layer was deleted. */}return;}
  if(msg.type==='cancel'){exportId++;return;}

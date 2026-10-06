@@ -16,7 +16,7 @@ for(const entry of catalog){if(!paths[entry.id])continue;const bytes=fs.readFile
 if(preset){core.PrintCore.validateICC(preset);bundled.custom=packProfile(preset);}
 const worker=read('vendor/ghostscript.js')+'\n'+read('src/worker.js');
 const notices='/*! pdf-lib 1.17.1\n'+read('vendor/pdf-lib-LICENSE.md')+'\njs-sha256 0.11.1\n'+read('vendor/sha256-LICENSE.txt')+'*/\n';
-const bundle=notices+read('vendor/pdf-lib.min.js')+'\n'+read('src/core.js')+'\n'+read('src/shading.js')+'\n'+read('vendor/sha256.js')+'\n'+read('src/assets.js')+'\nconst WORKER_SOURCE='+JSON.stringify(worker)+';\nconst PROFILE_CATALOG='+JSON.stringify(catalog)+';\nconst BUNDLED_PROFILES='+JSON.stringify(bundled)+';\n'+read('src/ui.js')+'\n'+read('src/menu.js');
+const bundle=notices+read('vendor/pdf-lib.min.js')+'\n'+read('src/core.js')+'\n'+read('src/shading.js')+'\n'+read('vendor/sha256.js')+'\n'+read('src/assets.js')+'\nconst WORKER_SOURCE='+JSON.stringify(worker)+';\nconst PROFILE_CATALOG='+JSON.stringify(catalog)+';\nconst BUNDLED_PROFILES='+JSON.stringify(bundled)+';\n'+read('src/ui.js')+'\n'+read('src/menu.js')+'\n'+read('src/resize.js');
 fs.writeFileSync('dist/ui.html',read('src/ui.html').replace('/*BUNDLE*/',()=>bundle.replace(/<\/script/gi,'<\\/script')));fs.copyFileSync('src/controller.js','dist/code.js');
 
 const size=fs.statSync('dist/ui.html').size+fs.statSync('dist/code.js').size;console.log('Plugin code: '+size+' bytes (limit 15,000,000)');if(size>15000000)throw new Error('Plugin exceeds Figma’s 15 MB publishing limit.');
