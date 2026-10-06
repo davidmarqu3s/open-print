@@ -25,7 +25,8 @@ li .name .end{flex:none;white-space:pre}
 ol.expanded{max-height:none}
 li .size{flex:none;color:var(--text2);font-variant-numeric:tabular-nums}
 li.invalid,li.invalid svg,li.invalid .size{color:var(--warning)}
-li.empty{height:auto;padding:12px 8px;color:var(--text2)}
+/* Lines up with a frame name: 8px padding, 16px icon, 8px gap. */
+li.empty{padding-left:32px;color:var(--text2)}
 li.empty:hover{background:none}
 li.issue{height:24px;padding-left:32px;color:var(--danger)}
 li.issue:hover{background:none}
