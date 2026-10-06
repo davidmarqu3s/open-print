@@ -28,12 +28,12 @@ function marksProblem(){return marksOn()?PrintCore.marksProblem(marks,Math.max(0
 function bleedProblem(){return Number.isFinite(bleedSetting)&&bleedSetting>0&&bleedSetting<=20?'':'Enter a bleed between 0 and 20 mm.';}
 function showLengths(){el('bleed').value=displayDimension(bleedSetting);el('mark-offset').value=displayDimension(marks.offset);el('mark-length').value=displayDimension(marks.length);el('mark-weight').value=marks.weight;for(const id of ['bleed','mark-offset','mark-length']){el(id).step=unit==='in'?'.01':'.5';}}
 // The finished sheet: trim plus the bleed, or plus the marks' offset and length.
-function sheetHint(){
+function sheetSize(){
  const valid=frames.filter(f=>f.type==='FRAME'),bleeds=[...new Set(valid.map(frameBleed))];
  if(!valid.length||(!marksOn()&&bleeds.every(b=>!b)))return '';
  if(dimensions.width===null||dimensions.height===null||bleeds.length>1||marksProblem())return '';
  const margin=PrintCore.margin(bleeds[0],marksOn()?marks:null),round=v=>Math.round(v*100)/100;
- return 'PDF page '+formatSize({width:round(dimensions.width+2*margin),height:round(dimensions.height+2*margin)})+(marksOn()?' with crop marks.':' with bleed.');
+ return formatSize({width:round(dimensions.width+2*margin),height:round(dimensions.height+2*margin)});
 }
 // Truncate in the middle so names that share a long prefix stay distinguishable. The kept end starts at a word.
 const NAME_TAIL=14;
@@ -72,8 +72,8 @@ function refresh(){const invalid=frames.filter(f=>f.type!=='FRAME'),problem=size
  el('marks-error').textContent=marking;
  // An offset inside the bleed has one obvious fix, so offer it.
  const needed=Math.max(0,...frames.map(frameBleed));if(/at least the bleed/.test(marking)&&!locked){const fix=document.createElement('button');fix.className='link';fix.textContent='Use '+formatLength(needed);fix.onclick=()=>{marks.offset=needed;showLengths();clearResult();refresh();};el('marks-error').replaceChildren(document.createTextNode(marking+' '),fix);}el('mark-offset-field').className='field plain'+(/Offset/.test(marking)?' invalid':'');el('mark-length-field').className='field plain'+(/Length/.test(marking)?' invalid':'');el('mark-weight-field').className='field plain'+(/Thickness/.test(marking)?' invalid':'');
- // The page size sits under the last section that is on.
- el('sheet-hint').textContent=sheetHint();el('sheet-hint').hidden=!el('sheet-hint').textContent;if(!marksOn()&&anyBleed)el('bleed-section').append(el('sheet-hint'));else el('marks-section').append(el('sheet-hint'));
+ // The PDF page size sits beside the bleed amount, or under the crop marks when there is no bleed.
+ const sheet=sheetSize();el('sheet-size').textContent=sheet&&'PDF '+sheet;el('sheet-hint').textContent=!anyBleed&&sheet?'PDF page '+sheet+' with crop marks.':'';el('sheet-hint').hidden=!el('sheet-hint').textContent;
  // PDF/X needs an output intent, so it waits for a profile.
  el('pdfx').disabled=locked||!profile;el('pure-black').disabled=locked;el('pdfx-hint').textContent=profile||!el('pdfx').checked?'':'PDF/X-4 needs a color profile.';}
 function stop(){if(engineAbort){engineAbort.abort();engineAbort=null;}if(worker){worker.terminate();worker=null;}busy=false;job=null;refresh();parent.postMessage({pluginMessage:{type:'ready'}},'*');}

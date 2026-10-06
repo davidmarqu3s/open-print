@@ -53,6 +53,7 @@ input[type=number]{-moz-appearance:textfield}input::-webkit-outer-spin-button,in
 .field.plain input{padding-left:8px}
 /* Bleed and Crop marks are added and removed from their headers, like Figma's Effects section; settings show once added. */
 section.collapsed{padding-bottom:8px}
+.sheet{align-self:center;min-width:0;overflow:hidden;color:var(--text2);text-overflow:ellipsis;white-space:nowrap;font-variant-numeric:tabular-nums}
 .icon{width:24px;height:24px;margin-right:-6px;padding:0;background:none;color:var(--icon2)}
 .icon:hover:not(:disabled){background:var(--bg-hover);color:var(--text)}
 .icon:disabled{opacity:.4}
@@ -123,7 +124,7 @@ footer{flex:none;border-top:1px solid var(--border)}
 <button id="size-reset" class="link reset" hidden>Reset to frame size</button>
 <div class="match" id="size-match" hidden><span id="size-match-text"></span><button id="size-snap" class="link"></button></div></section>
 <section id="bleed-section" class="collapsed"><div class="head"><h2>Bleed</h2><button id="bleed-toggle" class="icon"></button></div>
-<div id="bleed-options" hidden><label class="field plain" id="bleed-field" title="Bleed on each side"><input id="bleed" aria-label="Bleed on each side" type="number" min="0" max="20" step=".5"><span class="suffix length-unit">mm</span></label></div>
+<div id="bleed-options" class="dims" hidden><label class="field plain" id="bleed-field" title="Bleed on each side"><input id="bleed" aria-label="Bleed on each side" type="number" min="0" max="20" step=".5"><span class="suffix length-unit">mm</span></label><span class="sheet" id="sheet-size" title="PDF page size, including bleed and any crop marks"></span></div>
 <p class="hint" id="bleed-hint"></p></section>
 <section id="marks-section" class="collapsed"><div class="head"><h2>Crop marks</h2><button id="marks-toggle" class="icon"></button></div>
 <div id="marks-options" hidden><div class="trio"><div class="labelled"><label class="field-label" for="mark-offset">Offset</label><label class="field plain" id="mark-offset-field" title="Distance from the trim to the start of each mark"><input id="mark-offset" type="number" min="0" max="20" step=".5"><span class="suffix length-unit">mm</span></label></div><div class="labelled"><label class="field-label" for="mark-length">Length</label><label class="field plain" id="mark-length-field" title="Length of each mark"><input id="mark-length" type="number" min="2" max="20" step=".5"><span class="suffix length-unit">mm</span></label></div><div class="labelled"><label class="field-label" for="mark-weight">Thickness</label><label class="field plain" id="mark-weight-field" title="Line thickness of the marks"><input id="mark-weight" type="number" min=".1" max="2" step=".05"><span class="suffix">pt</span></label></div></div>
