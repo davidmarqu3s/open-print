@@ -177,7 +177,7 @@ test('New frame posts the chosen size and resets, and no selection leaves the pa
 test('preflight shows a count in the footer and lists problems under their frame when shown',async()=>{
  const h=ui();h.el('pure-black').checked=true;await select(h,[frame('1',595,842)]);assert.equal(h.el('preflight').hidden,false);assert.equal(h.el('preflight-summary').textContent,'Checking…');
  await send(h,{type:'preflight',frames:[{id:'1',findings:[{kind:'image',nodeId:'5',name:'Photo',ppi:120},{kind:'image',nodeId:'6',name:'Logo',ppi:400},{kind:'text',nodeId:'7',name:'Caption',size:5,rich:null,pure:5,gap:20}]}]});
- assert.equal(h.el('preflight-summary').textContent,'2 problems');assert.match(h.el('preflight-summary').className,/error/);assert.equal(h.el('frames').children.length,1,'listed only when shown');
+ assert.equal(h.el('preflight-summary').textContent,'2 errors');assert.match(h.el('preflight-summary').className,/error/);assert.equal(h.el('frames').children.length,1,'listed only when shown');
  h.el('preflight-toggle').onclick();const rows=h.el('frames').children;
  assert.deepEqual(rows.slice(1).map(r=>r.textContent.replace(/Show$/,'')),['120 ppi image · Photo','5 pt text · Caption']);assert.equal(rows[2].className,'issue warning');
  rows[1].children[1].onclick();assert.equal(h.messages.at(-1).type,'show-layer');assert.equal(h.messages.at(-1).id,'5');
@@ -186,11 +186,11 @@ test('preflight shows a count in the footer and lists problems under their frame
 test('preflight limits apply at print size, and pure black only counts as rich black when it is off',async()=>{
  const h=ui();h.el('pure-black').checked=true;await select(h,[frame('1',595,842)]);
  await send(h,{type:'preflight',frames:[{id:'1',findings:[{kind:'image',nodeId:'5',name:'Photo',ppi:310},{kind:'text',nodeId:'7',name:'Caption',size:10,rich:null,pure:10,gap:null}]}]});
- assert.equal(h.el('preflight-summary').textContent,'No problems');assert.match(h.el('preflight-summary').className,/ok/);
+ assert.equal(h.el('preflight-summary').textContent,'No errors');assert.match(h.el('preflight-summary').className,/ok/);
  // Doubling the page size halves the image's ppi.
- h.el('width').value='420';h.el('width').oninput();h.el('height').value='594';h.el('height').oninput();assert.equal(h.el('preflight-summary').textContent,'1 problem');
- h.el('size-reset').onclick();assert.equal(h.el('preflight-summary').textContent,'No problems');
- h.el('pure-black').checked=false;h.el('pure-black').onchange();assert.equal(h.el('preflight-summary').textContent,'1 problem');
+ h.el('width').value='420';h.el('width').oninput();h.el('height').value='594';h.el('height').oninput();assert.equal(h.el('preflight-summary').textContent,'1 error');
+ h.el('size-reset').onclick();assert.equal(h.el('preflight-summary').textContent,'No errors');
+ h.el('pure-black').checked=false;h.el('pure-black').onchange();assert.equal(h.el('preflight-summary').textContent,'1 error');
  h.el('preflight-toggle').onclick();assert.match(h.el('frames').children[1].textContent,/Rich black 10 pt text · Caption/);
 });
 test('long preflight lists show three per frame until expanded',async()=>{

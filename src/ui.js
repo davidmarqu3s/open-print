@@ -79,11 +79,11 @@ function preflightIssues(frame){
  const bleed=pdfBleed(frame);if(bleed>0&&bleed<PREFLIGHT.bleed-0.005&&!scaleProblem().text)add('warning','Bleed under '+PREFLIGHT.bleed+' mm',{name:frame.name,nodeId:frame.id});
  return out.sort((a,b)=>(a.severity==='error'?0:1)-(b.severity==='error'?0:1));
 }
-// The footer line works like InDesign's preflight light: a dot and a count, with the problems listed under their frames when shown.
+// The footer line works like InDesign's preflight light: a dot and a count, worded as errors like InDesign's (warnings count too), with the problems listed under their frames when shown.
 function renderPreflight(){
  const valid=frames.filter(printable),checked=valid.every(f=>checks.has(f.id)),all=valid.flatMap(preflightIssues),errors=all.some(i=>i.severity==='error');
  el('preflight').hidden=!valid.length;if(!valid.length)return;
- el('preflight-summary').textContent=!checked?'Checking…':!all.length?'No problems':all.length===1?'1 problem':all.length+' problems';
+ el('preflight-summary').textContent=!checked?'Checking…':!all.length?'No errors':all.length===1?'1 error':all.length+' errors';
  el('preflight-summary').className='preflight-summary'+(!checked?'':!all.length?' ok':errors?' error':' warning');
  el('preflight-toggle').hidden=!all.length;el('preflight-toggle').textContent=checksOpen?'Hide':'Show';
 }
