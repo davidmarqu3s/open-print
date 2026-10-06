@@ -44,7 +44,17 @@ async function describe(n) {
 // Selection changes can overlap while main components load, so only the latest one is posted.
 let selectionId=0;
 async function selection() { const id=++selectionId,frames=await Promise.all(figma.currentPage.selection.map(describe));if(id===selectionId)figma.ui.postMessage({type:'selection',frames}); }
-figma.on('selectionchange',selection);
+// Layers added to a frame land above its trim outline, so the outline moves back on top. Instances follow their main component.
+function keepTrimOnTop(frame) {
+ if(!frame||frame.removed||frame.type==='INSTANCE'||!PRINTABLE.includes(frame.type))return;
+ const trim=trimLayer(frame);if(trim&&frame.children[frame.children.length-1]!==trim)frame.appendChild(trim);
+}
+function watchPage(page) {
+ if(!page||typeof page.on!=='function')return;
+ page.on('nodechange',event=>{for(const change of event.nodeChanges){const node=change.node;try{if(change.type!=='DELETE'&&node&&!node.removed)keepTrimOnTop(node.parent);}catch(error){/* The layer went away mid-change. */}}});
+}
+watchPage(figma.currentPage);figma.on('currentpagechange',()=>watchPage(figma.currentPage));
+figma.on('selectionchange',()=>{for(const n of figma.currentPage.selection)try{keepTrimOnTop(n.parent);}catch(error){/* Leave the order alone. */}selection();});
 // Figma rasterises these effects at 144 ppi in PDF exports. Other effect types are untested.
 const EFFECTS=['DROP_SHADOW','INNER_SHADOW','LAYER_BLUR','BACKGROUND_BLUR'];
 // Figma's PDF export can't draw these, so layers that use them are swapped for a 300 ppi PNG of the layer in the scaled copy.
@@ -188,8 +198,8 @@ figma.ui.onmessage=async msg=>{
    const bleed=Number(msg.bleed);if(msg.type==='show-bleed'&&!(bleed>0&&bleed<=1000))throw new Error('Enter a bleed between 0 and 1000 units.');
    const nodes=[];for(const nodeId of Array.isArray(msg.ids)?msg.ids:[]){const n=await figma.getNodeByIdAsync(nodeId);if(n&&(n.type==='FRAME'||n.type==='COMPONENT'))nodes.push(n);}
    if(!nodes.length)throw new Error('Select one or more frames or components.');
-   // Bleed rounds up to whole pixels so the bleed edge sits on Figma's pixel grid, like the frame (3 mm is 9 px, not 8.5).
-   const whole=Math.ceil(bleed-1e-6);
+   // Bleed rounds to the nearest whole pixel, at least 1, so the bleed edge sits on Figma's pixel grid like the frame (3 mm is 9 px, not 8.5).
+   const whole=Math.max(1,Math.round(bleed));
    for(const n of nodes)if(msg.type==='show-bleed')showBleed(n,whole);else hideBleed(n);
   }catch(error){figma.ui.postMessage({type:'error',text:error.message||String(error)});}
   await selection();return;

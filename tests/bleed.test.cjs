@@ -10,7 +10,7 @@ function node(props={}){
  return n;
 }
 function controller(frames){
- const messages=[],page=node(),log={exported:[]};
+ const messages=[],page=node(),log={exported:[]};page.handlers={};page.on=(name,fn)=>{page.handlers[name]=fn;};
  for(const f of frames)page.appendChild(f);
  const figma={showUI(){},on(){},currentPage:Object.assign(page,{selection:frames}),getNodeByIdAsync:async id=>frames.find(f=>f.id===id),ui:{postMessage:m=>messages.push(m)},
   createRectangle:()=>node({type:'RECTANGLE'}),createFrame:()=>node({type:'FRAME',fills:[{type:'SOLID'}],exportAsync:async function(){log.exported.push(this);return new Uint8Array([3]);}})};
@@ -37,7 +37,7 @@ test('show bleed moves the background onto a locked layer around the frame and t
  assert.equal(messages.at(-1).type,'selection');assert.equal(messages.at(-1).frames[0].bleed,9);
  // A second Show bleed resizes the same layer and keeps one trim outline.
  await figma.ui.onmessage({type:'show-bleed',ids:['1'],bleed:14.17});
- assert.equal(frame.children.filter(c=>c.name==='Bleed').length,1);assert.equal(frame.children.filter(c=>c.name==='Trim').length,1);assert.equal(frame.children[0].x,-15);assert.deepEqual(plain(frame.children[0].fills),[RED]);
+ assert.equal(frame.children.filter(c=>c.name==='Bleed').length,1);assert.equal(frame.children.filter(c=>c.name==='Trim').length,1);assert.equal(frame.children[0].x,-14);assert.deepEqual(plain(frame.children[0].fills),[RED]);
 });
 test('show bleed outlines the original frame edge with a locked, unfilled layer on top',async()=>{
  const {frame}=poster(),{figma}=controller([frame]);
@@ -52,11 +52,19 @@ test('a frame given bleed before the trim outline existed gets one when bleed is
  await figma.ui.onmessage({type:'show-bleed',ids:['1'],bleed:8.5});frame.children.at(-1).remove();
  await figma.ui.onmessage({type:'show-bleed',ids:['1'],bleed:8.5});assert.equal(frame.children.at(-1).name,'Trim');
 });
-test('added bleed rounds up to whole pixels',async()=>{
+test('added bleed rounds to the nearest whole pixel, at least 1',async()=>{
  const {frame}=poster(),{figma}=controller([frame]);
  await figma.ui.onmessage({type:'show-bleed',ids:['1'],bleed:3*72/25.4});assert.equal(frame.children[0].x,-9);
  await figma.ui.onmessage({type:'show-bleed',ids:['1'],bleed:12});assert.equal(frame.children[0].x,-12);
+ await figma.ui.onmessage({type:'show-bleed',ids:['1'],bleed:8.4});assert.equal(frame.children[0].x,-8);
  await figma.ui.onmessage({type:'show-bleed',ids:['1'],bleed:0.2});assert.equal(frame.children[0].x,-1);
+});
+test('the trim outline moves back on top when layers are added to the frame',async()=>{
+ const {frame}=poster(),{figma,page}=controller([frame]);
+ await figma.ui.onmessage({type:'show-bleed',ids:['1'],bleed:9});
+ const image=node({type:'RECTANGLE',name:'Image'});frame.appendChild(image);assert.equal(frame.children.at(-1),image);
+ page.handlers.nodechange({nodeChanges:[{type:'CREATE',node:image}]});
+ assert.equal(frame.children.at(-1).name,'Trim');assert.equal(frame.children.at(-2),image);
 });
 test('hide bleed puts the background back, removes the layer and restores clipping',async()=>{
  const {frame}=poster(),{figma,messages}=controller([frame]);
