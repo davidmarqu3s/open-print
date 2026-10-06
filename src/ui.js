@@ -66,7 +66,7 @@ function refresh(){const invalid=frames.filter(f=>f.type!=='FRAME'),problem=size
  el('bleed-field').className='field plain'+(bleedProblem()?' invalid':'');
  el('bleed-hint').textContent=!anyBleed?'':bleedProblem()||(shown.length>1?'Bleed varies between frames: '+shown.map(formatLength).join(', ')+'.':bleeds.length<count?bleeds.length+' of '+count+' frames '+(bleeds.length===1?'has':'have')+' bleed.':'Drag images past the frame edge to fill the bleed.');
  el('bleed-hint').className='hint'+(bleedProblem()?' error':'');
- setToggle('marks-toggle',marksOn(),marksOn()?'Remove crop marks':'Add crop marks');el('marks-toggle').disabled=locked;
+ setToggle('marks-toggle',marksOn(),marksOn()?'Remove crop marks':'Add crop marks');el('marks-toggle').disabled=locked||(!count&&!marksOn());
  el('marks-options').hidden=!marksOn();el('marks-section').className=marksOn()?'':'collapsed';for(const id of ['mark-offset','mark-length','mark-weight'])el(id).disabled=locked;
  el('marks-error').textContent=marking;
  // An offset inside the bleed has one obvious fix, so offer it.
