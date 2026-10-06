@@ -11,7 +11,7 @@ Open Print is an open-source Figma plugin that exports selected frames and compo
 
 ## Export a PDF
 
-1. Select up to 32 frames or components and run **Plugins → Development → Open Print**.
+1. Select up to 32 frames or components and run **Plugins → Development → Open Print → Export PDF…**.
 2. The page size follows the frame. To use another size, enter a width and height; **Reset to frame size** brings the frame size back. The **mm**/**in** menu next to **Page size** switches units.
 3. With several frames, choose **One multipage PDF** or **Individual PDFs** under **Export as**. Individual PDFs open one Save dialog per frame.
 4. Under **Color profile**, choose your printer’s CMYK profile, **No profile** or **Custom CMYK profile…**, then click **Export CMYK PDF**.
@@ -21,6 +21,8 @@ The profile controls the conversion and is embedded in the PDF. With **No profil
 ## Page size
 
 Figma frames have no physical size, so the plugin uses Figma’s PDF scale of 72 frame units per inch. A 907 × 1276 frame becomes 319.97 × 450.14 mm. When a frame is within 0.5 mm (0.2% on large sheets) of a standard size, such as A3 or Letter, a **Use A3**-style button enters the exact size. A typed size applies to every page, and each frame’s artwork scales to fit it, centred. Vectors stay sharp; noise, textures and other effects are rendered for the printed size, and the low-resolution warning allows for the scale. Scaling down also shrinks the bleed, so if less than 3 mm would be left, export waits until you click **Use … bleed** to enlarge it on the canvas.
+
+To start a design at a standard size, choose **Plugins → Development → Open Print → New frame** and pick A0 to A6. The frame is created at the exact size in the middle of your view and selected.
 
 ## Bleed and crop marks
 

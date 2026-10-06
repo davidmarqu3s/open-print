@@ -8,6 +8,48 @@
     "figma"
   ],
   "documentAccess": "dynamic-page",
+  "menu": [
+    {
+      "name": "Export PDF…",
+      "command": "export"
+    },
+    {
+      "separator": true
+    },
+    {
+      "name": "New frame",
+      "menu": [
+        {
+          "name": "A0 (841 × 1189 mm)",
+          "command": "frame-A0"
+        },
+        {
+          "name": "A1 (594 × 841 mm)",
+          "command": "frame-A1"
+        },
+        {
+          "name": "A2 (420 × 594 mm)",
+          "command": "frame-A2"
+        },
+        {
+          "name": "A3 (297 × 420 mm)",
+          "command": "frame-A3"
+        },
+        {
+          "name": "A4 (210 × 297 mm)",
+          "command": "frame-A4"
+        },
+        {
+          "name": "A5 (148 × 210 mm)",
+          "command": "frame-A5"
+        },
+        {
+          "name": "A6 (105 × 148 mm)",
+          "command": "frame-A6"
+        }
+      ]
+    }
+  ],
   "networkAccess": {
     "allowedDomains": [
       "https://raw.githubusercontent.com/davidmarqu3s/open-print/436f731594ae50c359e70c03c0135e63cbd47cf8/vendor/ghostscript.wasm"

@@ -9,6 +9,7 @@ Notable changes to Open Print. Each release’s notes are also used on GitHub Re
 - Bleed and crop marks are added with a + button, and their settings show once added.
 - A custom page size scales the artwork to fit, centred, instead of cropping it.
 - Components and instances can be exported, with bleed and crop marks. Instances take their bleed from the main component.
+- New frame menu creates A0 to A6 frames at the exact size.
 
 ## 0.1.0 – 2026-10-06
 
