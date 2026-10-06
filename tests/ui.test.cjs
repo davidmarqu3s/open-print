@@ -3,7 +3,7 @@ function ui(bundled={}){
  const elements={},clicks=[],blobs=new Map(),listeners=new Map(),timers=new Map(),revocations=[];let nextURL=0,nextTimer=0,now=0,focused=true;
  const emit=type=>{focused=type==='focus';for(const fn of [...(listeners.get(type)||[])])fn({type});};
  const runTimers=delay=>{const end=now+delay;for(;;){const next=[...timers].filter(([,t])=>t.at<=end).sort((a,b)=>a[1].at-b[1].at)[0];if(!next)break;timers.delete(next[0]);now=next[1].at;next[1].fn();}now=end;};
- const make=tag=>({tag,children:[],value:'',groups:[],options:[],checked:false,
+ const make=tag=>({tag,children:[],value:'',groups:[],options:[],checked:false,attributes:{},setAttribute(name,value){this.attributes[name]=String(value);},getAttribute(name){return name in this.attributes?this.attributes[name]:null;},
   get textContent(){return this.children.length?this.children.map(child=>child.textContent||'').join(''):this.text||'';},
   set textContent(value){this.text=value;for(const child of this.children)child.parentNode=null;this.children=[];},
   get isConnected(){return !!this.root||!!(this.parentNode&&this.parentNode.isConnected);},
@@ -203,3 +203,4 @@ test('long preflight lists show three per frame until expanded',async()=>{
  h.el('preflight-toggle').onclick();let rows=h.el('frames').children;assert.equal(rows.length,5);assert.equal(rows[4].textContent,'2 more in this frame');
  rows[4].children[0].onclick();rows=h.el('frames').children;assert.equal(rows.length,6);assert.match(rows[5].textContent,/0.1 pt hairline · Rule 5/);
 });
+test('the + next to Frames says it resizes when frames are selected',async()=>{const h=ui();await select(h,[]);assert.equal(h.el('new-frame').getAttribute('aria-label'),'New frame');await select(h,[frame('1',595,842)]);assert.equal(h.el('new-frame').getAttribute('aria-label'),'Resize to paper size');});

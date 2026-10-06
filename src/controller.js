@@ -1,9 +1,12 @@
 figma.showUI(__html__, {width:320,height:560,themeColors:true});
 // New frame creates a paper-size frame at 72 units per inch, the scale the export uses, rounded to whole pixels like Figma's own presets (A4 is 595 × 842).
 const PAPER_FRAMES={'A0':[841,1189],'A1':[594,841],'A2':[420,594],'A3':[297,420],'A4':[210,297],'A5':[148,210],'A6':[105,148],'DL':[99,210],'Business card':[85,55],'50 × 70 cm poster':[500,700],'70 × 100 cm poster':[700,1000],'Letter':[215.9,279.4],'Tabloid':[279.4,431.8]};
+// With frames or components selected, it resizes them instead, from their top left, keeping each one landscape or portrait. Bleed and trim layers stretch with them.
 function newPaperFrame(name) {
  const mm=Object.prototype.hasOwnProperty.call(PAPER_FRAMES,name)?PAPER_FRAMES[name]:null;if(!mm)return;
- const [width,height]=mm.map(v=>Math.round(v*72/25.4)),view=figma.viewport.bounds,frame=figma.createFrame();
+ const [width,height]=mm.map(v=>Math.round(v*72/25.4)),selected=figma.currentPage.selection.filter(n=>PRINTABLE.includes(n.type));
+ if(selected.length){for(const n of selected){const landscape=n.width>n.height,[w,h]=landscape===(width>height)?[width,height]:[height,width];n.resize(w,h);}return;}
+ const view=figma.viewport.bounds,frame=figma.createFrame();
  frame.name=name;frame.resize(width,height);frame.x=Math.round(figma.viewport.center.x-width/2);frame.y=Math.round(figma.viewport.center.y-height/2);
  figma.currentPage.selection=[frame];
  if(width>view.width||height>view.height)figma.viewport.scrollAndZoomIntoView([frame]);
@@ -261,7 +264,7 @@ figma.ui.onmessage=async msg=>{
  if(msg.type==='show-layer'){try{const node=await figma.getNodeByIdAsync(String(msg.id));if(node&&node.type!=='PAGE'&&node.type!=='DOCUMENT')figma.viewport.scrollAndZoomIntoView([node]);}catch(error){/* The layer was deleted. */}return;}
  // Selects a layer that may be on another page, such as an instance's main component.
  if(msg.type==='select-layer'){try{const node=await figma.getNodeByIdAsync(String(msg.id));let page=node;while(page&&page.type!=='PAGE')page=page.parent;if(!node||!page)return;if(page!==figma.currentPage)await figma.setCurrentPageAsync(page);figma.currentPage.selection=[node];figma.viewport.scrollAndZoomIntoView([node]);}catch(error){/* The layer was deleted. */}return;}
- if(msg.type==='new-frame'){newPaperFrame(String(msg.size));return;}
+ if(msg.type==='new-frame'){try{newPaperFrame(String(msg.size));}catch(error){figma.ui.postMessage({type:'error',text:error.message||String(error)});}await selection();return;}
  if(msg.type==='cancel'){exportId++;return;}
  if(msg.type==='show-bleed'||msg.type==='hide-bleed'){
   try{
