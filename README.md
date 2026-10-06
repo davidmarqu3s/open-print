@@ -20,7 +20,7 @@ The profile controls the conversion and is embedded in the PDF. With **No profil
 
 ## Page size
 
-Figma frames have no physical size, so the plugin uses Figma’s PDF scale of 72 frame units per inch. A 907 × 1276 frame becomes 319.97 × 450.14 mm. When a frame is within 0.5 mm of a standard size, such as A3 or Letter, a **Use A3**-style button enters the exact size. A typed size applies to every page, and each frame’s artwork scales to fit it, centred. Vectors stay sharp; noise, textures and other effects are rendered for the printed size, and the low-resolution warning allows for the scale. Scaling down also shrinks the bleed, so if less than 3 mm would be left, export waits until you click **Use … bleed** to enlarge it on the canvas.
+Figma frames have no physical size, so the plugin uses Figma’s PDF scale of 72 frame units per inch. A 907 × 1276 frame becomes 319.97 × 450.14 mm. When a frame is within 0.5 mm (0.2% on large sheets) of a standard size, such as A3 or Letter, a **Use A3**-style button enters the exact size. A typed size applies to every page, and each frame’s artwork scales to fit it, centred. Vectors stay sharp; noise, textures and other effects are rendered for the printed size, and the low-resolution warning allows for the scale. Scaling down also shrinks the bleed, so if less than 3 mm would be left, export waits until you click **Use … bleed** to enlarge it on the canvas.
 
 ## Bleed and crop marks
 

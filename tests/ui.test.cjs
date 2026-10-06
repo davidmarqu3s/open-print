@@ -171,3 +171,5 @@ test('components export, and an instance points to its main component for bleed'
  await select(h,[{id:'2',name:'Card',type:'INSTANCE',width:241,height:156,bleed:8.5,mainId:'1'}]);
  assert.equal(el('bleed-options').hidden,false);assert.equal(el('bleed').disabled,true);assert.equal(el('bleed-hint').textContent,'');
 });
+test('a click on a header button toggles once, not again when it bubbles to the row',async()=>{const {window,el}=ui();await window.onmessage({data:{pluginMessage:{type:'selection',frames:[frame('1',595,842)]}}});el('marks-toggle').onclick();el('marks-head').onclick({target:{},composedPath:()=>[{},el('marks-toggle'),el('marks-head')]});assert.equal(el('marks-options').hidden,false);});
+test('large frames a little off a standard size still get the suggestion',async()=>{const {window,el}=ui();await window.onmessage({data:{pluginMessage:{type:'selection',frames:[frame('1',2380,3368)]}}});assert.equal(el('size-match').hidden,false);assert.match(el('size-match-text').textContent,/A0/);await window.onmessage({data:{pluginMessage:{type:'selection',frames:[frame('2',590,842)]}}});assert.equal(el('size-match').hidden,true);});
