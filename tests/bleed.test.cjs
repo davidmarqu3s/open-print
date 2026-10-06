@@ -70,6 +70,34 @@ test('a frame without bleed exports directly with zero bleed',async()=>{
  const {frame}=poster(),{figma,messages,log}=controller([frame]);
  await figma.ui.onmessage({type:'export',ids:['1']});assert.deepEqual([...messages.at(-1).bleeds],[0]);assert.equal(log.exported.length,0);
 });
+// An instance mirrors its main component's layers one for one and can be resized. Its layers can't be added to.
+function instanceOf(main,id,width,height){
+ const inst=node({id,type:'INSTANCE',name:main.name+' instance',width,height,getMainComponentAsync:async()=>main});
+ const mirror=()=>main.children.map(c=>{const b=c.getPluginData('open-print-bleed');return node({type:c.type,name:c.name,strokes:[...c.strokes],x:c.x,y:c.y,width:b?width+(c.width-main.width):c.width,height:b?height+(c.height-main.height):c.height});});
+ inst.children=mirror();inst.insertChild=()=>{throw new Error('Cannot add children to an instance');};
+ inst.exportAsync=async()=>new Uint8Array([2]);
+ inst.clone=()=>{const copy=node({type:'INSTANCE',width,height,getMainComponentAsync:async()=>main});copy.children=mirror();return copy;};
+ return inst;
+}
+test('a component takes bleed like a frame, and its instances show and export it',async()=>{
+ const {frame:component}=poster();component.type='COMPONENT';component.name='Card';
+ const instance=instanceOf(component,'2',700,900),{figma,messages,log}=controller([component,instance]);
+ await figma.ui.onmessage({type:'show-bleed',ids:['1','2'],bleed:8.5});
+ assert.equal(component.children[0].name,'Bleed');assert.equal(component.clipsContent,false);
+ // Show bleed leaves the instance alone; it follows the main component.
+ instance.children=instanceOf(component,'2',700,900).children;
+ await figma.ui.onmessage({type:'ready'});
+ const sent=messages.at(-1).frames;assert.equal(sent[0].bleed,8.5);assert.equal(sent[1].bleed,8.5);assert.equal(sent[1].mainId,'1');
+ await figma.ui.onmessage({type:'export',ids:['2']});
+ const msg=messages.at(-1);assert.equal(msg.type,'pdfs',msg.text);assert.deepEqual([...msg.bleeds],[8.5]);
+ const wrapper=log.exported[0];assert.deepEqual([wrapper.width,wrapper.height],[717,917]);assert.deepEqual(plain(wrapper.children[0].children[0].strokes),[]);
+});
+test('show bleed on an instance alone asks for a frame or component',async()=>{
+ const {frame:component}=poster();component.type='COMPONENT';
+ const instance=instanceOf(component,'2',595,842),{figma,messages}=controller([instance]);
+ await figma.ui.onmessage({type:'show-bleed',ids:['2'],bleed:8.5});
+ assert.match(messages.find(m=>m.type==='error').text,/frames or components/);assert.equal(component.children.length,1);
+});
 function core(){const ctx={PDFLib,Uint8Array,DataView,Number,Error,Math,Object,String};vm.createContext(ctx);vm.runInContext(fs.readFileSync('src/core.js','utf8'),ctx);return ctx.PrintCore;}
 const pt=mm=>mm*72/25.4,close=(a,b)=>Math.abs(a-b)<1e-6;
 async function exported(bleedMm){const doc=await PDFLib.PDFDocument.create();doc.addPage([pt(210+2*bleedMm),pt(297+2*bleedMm)]).drawRectangle({x:0,y:0,width:10,height:10,color:PDFLib.cmyk(0,0,0,1)});return doc.save();}

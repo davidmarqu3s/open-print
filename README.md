@@ -2,7 +2,7 @@
 
 ![Open Print converts RGB Figma artwork into a print-ready CMYK PDF](docs/images/open-print-thumbnail.png)
 
-Open Print is an open-source Figma plugin that exports selected frames as vector CMYK PDFs. Conversion runs inside the plugin, so you don’t need a server or companion app.
+Open Print is an open-source Figma plugin that exports selected frames and components as vector CMYK PDFs. Conversion runs inside the plugin, so you don’t need a server or companion app.
 
 ## Install
 
@@ -11,7 +11,7 @@ Open Print is an open-source Figma plugin that exports selected frames as vector
 
 ## Export a PDF
 
-1. Select up to 32 frames and run **Plugins → Development → Open Print**.
+1. Select up to 32 frames or components and run **Plugins → Development → Open Print**.
 2. The page size follows the frame. To use another size, enter a width and height; **Reset to frame size** brings the frame size back. The **mm**/**in** menu next to **Page size** switches units.
 3. With several frames, choose **One multipage PDF** or **Individual PDFs** under **Export as**. Individual PDFs open one Save dialog per frame.
 4. Under **Color profile**, choose your printer’s CMYK profile, **No profile** or **Custom CMYK profile…**, then click **Export CMYK PDF**.
@@ -25,6 +25,8 @@ Figma frames have no physical size, so the plugin uses Figma’s PDF scale of 72
 ## Bleed and crop marks
 
 Click **+** next to **Bleed** to add 3 mm of bleed. Each frame gets a locked **Bleed** layer holding its background, and **Clip content** is turned off, so you can drag images past the edge and see exactly what will print. The amount then appears: change it and press Return to resize the bleed. Click **−** to remove it and put everything back. The frame is always the trim size.
+
+Components take bleed the same way, and their instances follow it. An instance can’t take bleed of its own, because Figma doesn’t allow new layers in instances, so the plugin offers to select its main component instead.
 
 Click **+** next to **Crop marks** to add Registration marks outside the bleed, with your own offset, length and thickness. The PDF’s TrimBox, BleedBox and MediaBox are set to match.
 
