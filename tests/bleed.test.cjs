@@ -34,7 +34,7 @@ test('show bleed moves the background onto a locked layer around the frame and t
  assert.deepEqual(plain(layer.fills),[RED]);assert.deepEqual(plain(frame.fills),[]);assert.equal(frame.clipsContent,false);assert.equal(layer.locked,true);
  assert.deepEqual(plain(layer.dashPattern),[4,4]);assert.equal(layer.strokes.length,1);
  assert.deepEqual(plain(layer.constraints),{horizontal:'STRETCH',vertical:'STRETCH'});
- assert.equal(messages.at(-1).type,'selection');assert.equal(messages.at(-1).frames[0].bleed,9);
+ assert.equal(messages.at(-1).type,'selection');assert.equal(messages.at(-1).frames[0].bleed,8.5);
  // A second Show bleed resizes the same layer and keeps one trim outline.
  await figma.ui.onmessage({type:'show-bleed',ids:['1'],bleed:14.17});
  assert.equal(frame.children.filter(c=>c.name==='Bleed').length,1);assert.equal(frame.children.filter(c=>c.name==='Trim').length,1);assert.equal(frame.children[0].x,-14);assert.deepEqual(plain(frame.children[0].fills),[RED]);
@@ -52,9 +52,9 @@ test('a frame given bleed before the trim outline existed gets one when bleed is
  await figma.ui.onmessage({type:'show-bleed',ids:['1'],bleed:8.5});frame.children.at(-1).remove();
  await figma.ui.onmessage({type:'show-bleed',ids:['1'],bleed:8.5});assert.equal(frame.children.at(-1).name,'Trim');
 });
-test('added bleed rounds to the nearest whole pixel, at least 1',async()=>{
- const {frame}=poster(),{figma}=controller([frame]);
- await figma.ui.onmessage({type:'show-bleed',ids:['1'],bleed:3*72/25.4});assert.equal(frame.children[0].x,-9);
+test('bleed shows on the canvas rounded to the nearest whole pixel, at least 1, and keeps its exact amount',async()=>{
+ const {frame}=poster(),{figma,messages}=controller([frame]);
+ await figma.ui.onmessage({type:'show-bleed',ids:['1'],bleed:3*72/25.4});assert.equal(frame.children[0].x,-9);assert(Math.abs(messages.at(-1).frames[0].bleed-3*72/25.4)<1e-3);
  await figma.ui.onmessage({type:'show-bleed',ids:['1'],bleed:12});assert.equal(frame.children[0].x,-12);
  await figma.ui.onmessage({type:'show-bleed',ids:['1'],bleed:8.4});assert.equal(frame.children[0].x,-8);
  await figma.ui.onmessage({type:'show-bleed',ids:['1'],bleed:0.2});assert.equal(frame.children[0].x,-1);
@@ -86,9 +86,9 @@ test('a frame with bleed exports from a clipping wrapper of trim plus bleed, wit
  const {frame}=poster(),{figma,messages,log,page}=controller([frame]);
  await figma.ui.onmessage({type:'show-bleed',ids:['1'],bleed:8.5});
  await figma.ui.onmessage({type:'export',ids:['1']});
- const msg=messages.at(-1);assert.equal(msg.type,'pdfs',msg.text);assert.deepEqual([...msg.bleeds],[9]);
- const wrapper=log.exported[0];assert.deepEqual([wrapper.width,wrapper.height],[613,860]);assert.equal(wrapper.clipsContent,true);assert.deepEqual(plain(wrapper.fills),[]);
- const copy=wrapper.children[0];assert.deepEqual([copy.x,copy.y],[9,9]);assert.deepEqual(plain(copy.children[0].strokes),[]);assert.equal(copy.children.at(-1).visible,false);
+ const msg=messages.at(-1);assert.equal(msg.type,'pdfs',msg.text);assert.deepEqual([...msg.bleeds],[8.5]);
+ const wrapper=log.exported[0];assert.deepEqual([wrapper.width,wrapper.height],[612,859]);assert.equal(wrapper.clipsContent,true);assert.deepEqual(plain(wrapper.fills),[]);
+ const copy=wrapper.children[0];assert.deepEqual([copy.x,copy.y],[8.5,8.5]);assert.deepEqual(plain(copy.children[0].strokes),[]);assert.equal(copy.children.at(-1).visible,false);
  assert.equal(wrapper.removed,true);assert.equal(page.children.length,1);
  // The original keeps its guide and trim outline.
  assert.equal(frame.children[0].strokes.length,1);assert.notEqual(frame.children.at(-1).visible,false);
@@ -114,10 +114,10 @@ test('a component takes bleed like a frame, and its instances show and export it
  // Show bleed leaves the instance alone; it follows the main component.
  instance.children=instanceOf(component,'2',700,900).children;
  await figma.ui.onmessage({type:'ready'});
- const sent=messages.at(-1).frames;assert.equal(sent[0].bleed,9);assert.equal(sent[1].bleed,9);assert.equal(sent[1].mainId,'1');
+ const sent=messages.at(-1).frames;assert.equal(sent[0].bleed,8.5);assert.equal(sent[1].bleed,8.5);assert.equal(sent[1].mainId,'1');
  await figma.ui.onmessage({type:'export',ids:['2']});
- const msg=messages.at(-1);assert.equal(msg.type,'pdfs',msg.text);assert.deepEqual([...msg.bleeds],[9]);
- const wrapper=log.exported[0];assert.deepEqual([wrapper.width,wrapper.height],[718,918]);assert.deepEqual(plain(wrapper.children[0].children[0].strokes),[]);
+ const msg=messages.at(-1);assert.equal(msg.type,'pdfs',msg.text);assert.deepEqual([...msg.bleeds],[8.5]);
+ const wrapper=log.exported[0];assert.deepEqual([wrapper.width,wrapper.height],[717,917]);assert.deepEqual(plain(wrapper.children[0].children[0].strokes),[]);
  const trim=wrapper.children[0].children.at(-1);assert.equal(trim.name,'Trim');assert.equal(trim.visible,false);
 });
 test('show bleed on an instance alone asks for a frame or component',async()=>{

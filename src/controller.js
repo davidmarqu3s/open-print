@@ -12,7 +12,7 @@ function newPaperFrame(name) {
 const UI_WIDTH=320,uiHeight=h=>Math.min(1600,Math.max(360,Math.round(Number(h)||560)));
 (async()=>{try{const h=await figma.clientStorage.getAsync('open-print-height');if(h)figma.ui.resize(UI_WIDTH,uiHeight(h));}catch(error){/* Keep the default height. */}})();
 let exportRun=Promise.resolve(),exportId=0,profileSave=Promise.resolve();
-// Show bleed adds this layer at the bottom of a frame. It holds the frame's background, sized to trim plus bleed, and its plugin data records the bleed in frame units.
+// Show bleed adds this layer at the bottom of a frame. It holds the frame's background, sized to trim plus bleed rounded to whole pixels, and its plugin data records the exact bleed in frame units, which export uses.
 const BLEED_KEY='open-print-bleed',BLEED_GUIDE={type:'SOLID',color:{r:1,g:0.2,b:0.2}};
 const bleedLayer=frame=>(frame.children||[]).find(c=>typeof c.getPluginData==='function'&&c.getPluginData(BLEED_KEY)!=='')||null;
 // The trim outline is a locked, unfilled layer at the top of a frame with bleed, marking the original edge. Export hides it.
@@ -28,10 +28,12 @@ async function layerOf(node,find) {
  return i>=0&&node.children[i]&&node.children[i].name===layer.name?node.children[i]:null;
 }
 const bleedLayerOf=node=>layerOf(node,bleedLayer);
-// An instance may be resized or scaled, so its bleed is measured from the layer rather than read from the main component.
+// An instance may be resized or scaled, so its bleed is measured from the layer, then scaled from the main component's whole-pixel layer to its exact bleed.
 async function bleedOfNode(node) {
  if(node.type!=='INSTANCE')return bleedOf(node);
- const layer=await bleedLayerOf(node),bleed=layer?(layer.width-node.width)/2:0;
+ const layer=await bleedLayerOf(node);let bleed=layer?(layer.width-node.width)/2:0;
+ const main=bleed>0?await node.getMainComponentAsync():null,mainLayer=main&&bleedLayer(main),drawn=mainLayer?(mainLayer.width-main.width)/2:0;
+ if(drawn>0)bleed*=bleedOf(main)/drawn;
  return bleed>0.001?Math.round(bleed*1000)/1000:0;
 }
 // The main component is offered as the place to add bleed, unless it comes from a library.
@@ -152,7 +154,9 @@ function showBleed(frame,bleed) {
   layer.strokes=[BLEED_GUIDE];layer.strokeWeight=1;layer.strokeAlign='OUTSIDE';layer.dashPattern=[4,4];
   frame.setPluginData(BLEED_KEY+'-clip',frame.clipsContent?'true':'false');frame.clipsContent=false;
  }
- layer.locked=false;layer.resize(frame.width+2*bleed,frame.height+2*bleed);layer.x=-bleed;layer.y=-bleed;
+ // On the canvas the bleed rounds to the nearest whole pixel, at least 1, so its edge sits on the pixel grid like the frame (3 mm shows as 9 px, not 8.5). Export cuts it to the exact bleed.
+ const drawn=Math.max(1,Math.round(bleed));
+ layer.locked=false;layer.resize(frame.width+2*drawn,frame.height+2*drawn);layer.x=-drawn;layer.y=-drawn;
  layer.constraints={horizontal:'STRETCH',vertical:'STRETCH'};layer.setPluginData(BLEED_KEY,String(bleed));layer.locked=true;
  // Frames given bleed before the trim outline existed get one the next time bleed is set.
  if(!trimLayer(frame)){
@@ -198,9 +202,7 @@ figma.ui.onmessage=async msg=>{
    const bleed=Number(msg.bleed);if(msg.type==='show-bleed'&&!(bleed>0&&bleed<=1000))throw new Error('Enter a bleed between 0 and 1000 units.');
    const nodes=[];for(const nodeId of Array.isArray(msg.ids)?msg.ids:[]){const n=await figma.getNodeByIdAsync(nodeId);if(n&&(n.type==='FRAME'||n.type==='COMPONENT'))nodes.push(n);}
    if(!nodes.length)throw new Error('Select one or more frames or components.');
-   // Bleed rounds to the nearest whole pixel, at least 1, so the bleed edge sits on Figma's pixel grid like the frame (3 mm is 9 px, not 8.5).
-   const whole=Math.max(1,Math.round(bleed));
-   for(const n of nodes)if(msg.type==='show-bleed')showBleed(n,whole);else hideBleed(n);
+   for(const n of nodes)if(msg.type==='show-bleed')showBleed(n,bleed);else hideBleed(n);
   }catch(error){figma.ui.postMessage({type:'error',text:error.message||String(error)});}
   await selection();return;
  }
