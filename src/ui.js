@@ -268,7 +268,8 @@ function showDownloads(outputs){
  const url=URL.createObjectURL(new Blob([output.bytes],{type:'application/pdf'})),a=document.createElement('a');
  a.href=url;a.download=output.filename;a.textContent='Save PDF';links.append(a);downloadUrls.push(url);
  const again=document.createElement('button');again.className='link again';again.textContent='Save again';again.onclick=()=>a.click();
- el('status').replaceChildren(document.createTextNode(output.filename+' is ready.'),links,again);el('status').className='done';
+ const message=document.createElement('span');message.textContent=output.filename+' is ready.';
+ el('status').replaceChildren(message,links,again);el('status').className='done';
  a.click();return [a];
 }
 async function prepareDownloads(bytes,current){

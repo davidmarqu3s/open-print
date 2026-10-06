@@ -15,7 +15,9 @@ h2{margin:0;font-size:11px;font-weight:550}
 .hint{margin:8px 0 0;color:var(--text2)}
 .hint:empty,[hidden]{display:none!important}
 .hint.error{color:var(--danger)}
-.match{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:8px;color:var(--text2)}
+/* Messages always stack: the text on its own line, any action link below it. */
+.hint .link{display:block;margin-top:4px}
+.match{display:flex;flex-direction:column;align-items:flex-start;gap:4px;margin-top:8px;color:var(--text2)}
 /* 6.5 rows: a cut-off row signals that the list scrolls. */
 ol{list-style:none;margin:0 -8px;padding:0;max-height:208px;overflow-y:auto}
 li{display:flex;align-items:center;gap:8px;height:32px;padding:0 8px;border-radius:5px}
@@ -114,8 +116,9 @@ li.issue.warning,li.issue.warning .name{color:var(--warning)}
 #status.done::before{content:"";flex:none;width:12px;height:12px;margin-top:2px;border-radius:50%;background:var(--success) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='6' fill='none' stroke='white' stroke-width='1.5'%3E%3Cpath d='M.75 3 3 5.25 7.25.75'/%3E%3C/svg%3E") no-repeat center}
 #status.done,#status.queue{color:var(--text)}
 #status .step{margin-left:auto;flex:none;color:var(--text2);font-variant-numeric:tabular-nums}
-#status .again{margin-left:auto;flex:none}
-#status.done:has(.note){flex-wrap:wrap}
+#status.done{display:grid;grid-template-columns:12px minmax(0,1fr);gap:4px 6px}
+#status.done>*{grid-column:2}
+#status .again{justify-self:start}
 #status .note{flex-basis:100%;color:var(--warning)}
 #status.busy::before{content:"";flex:none;width:12px;height:12px;margin-top:2px;border:1.5px solid var(--border);border-top-color:var(--brand);border-radius:50%;animation:spin .8s linear infinite}
 #status a{margin-left:auto;color:var(--figma-color-text-brand,#007be5);font-weight:550;text-decoration:none}
