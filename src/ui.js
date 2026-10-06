@@ -267,10 +267,8 @@ function showDownloads(outputs){
  const output=outputs[0],links=document.createElement('div');links.className='downloads';links.hidden=true;
  const url=URL.createObjectURL(new Blob([output.bytes],{type:'application/pdf'})),a=document.createElement('a');
  a.href=url;a.download=output.filename;a.textContent='Save PDF';links.append(a);downloadUrls.push(url);
- const again=document.createElement('button');again.className='link again';again.textContent='Save again';again.onclick=()=>a.click();
  const message=document.createElement('span');message.textContent=output.filename+' is ready.';
- const line=document.createElement('div');line.className='line';line.append(message,again);
- el('status').replaceChildren(line,links);el('status').className='done';
+ el('status').replaceChildren(message,links);el('status').className='done';
  a.click();return [a];
 }
 async function prepareDownloads(bytes,current){
