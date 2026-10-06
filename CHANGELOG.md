@@ -10,6 +10,8 @@ Notable changes to Open Print. Each release’s notes are also used on GitHub Re
 - A custom page size scales the artwork to fit, centred, instead of cropping it.
 - Components and instances can be exported, with bleed and crop marks. Instances take their bleed from the main component.
 - A + button next to Frames creates frames at exact paper sizes: A0 to A6, DL, business card, posters, Letter and Tabloid.
+- Adding bleed outlines the original frame edge on the canvas. The outline doesn’t print.
+- Bleed sits on whole pixels on the canvas (3 mm shows as 9 px), and the PDF still gets exactly 3 mm.
 
 ## 0.1.0 – 2026-10-06
 

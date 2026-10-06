@@ -12,22 +12,28 @@ function newPaperFrame(name) {
 const UI_WIDTH=320,uiHeight=h=>Math.min(1600,Math.max(360,Math.round(Number(h)||560)));
 (async()=>{try{const h=await figma.clientStorage.getAsync('open-print-height');if(h)figma.ui.resize(UI_WIDTH,uiHeight(h));}catch(error){/* Keep the default height. */}})();
 let exportRun=Promise.resolve(),exportId=0,profileSave=Promise.resolve();
-// Show bleed adds this layer at the bottom of a frame. It holds the frame's background, sized to trim plus bleed, and its plugin data records the bleed in frame units.
+// Show bleed adds this layer at the bottom of a frame. It holds the frame's background, sized to trim plus bleed rounded to whole pixels, and its plugin data records the exact bleed in frame units, which export uses.
 const BLEED_KEY='open-print-bleed',BLEED_GUIDE={type:'SOLID',color:{r:1,g:0.2,b:0.2}};
 const bleedLayer=frame=>(frame.children||[]).find(c=>typeof c.getPluginData==='function'&&c.getPluginData(BLEED_KEY)!=='')||null;
+// The trim outline is a locked, unfilled layer at the top of a frame with bleed, marking the original edge. Export hides it.
+const TRIM_KEY='open-print-trim',TRIM_GUIDE={type:'SOLID',color:{r:1,g:0.2,b:0.2}};
+const trimLayer=frame=>(frame.children||[]).find(c=>typeof c.getPluginData==='function'&&c.getPluginData(TRIM_KEY)!=='')||null;
 const bleedOf=frame=>{const layer=bleedLayer(frame),bleed=layer?Number(layer.getPluginData(BLEED_KEY)):0;return Number.isFinite(bleed)&&bleed>0?bleed:0;};
 // Frames, components and instances export. Instances can't take new layers, so they show their main component's bleed instead of their own.
 const PRINTABLE=['FRAME','COMPONENT','INSTANCE'];
-// An instance's layers match its main component's one for one, so its bleed layer sits where the main component's does.
-async function bleedLayerOf(node) {
- if(node.type!=='INSTANCE')return bleedLayer(node);
- const main=await node.getMainComponentAsync(),layer=main&&bleedLayer(main),i=layer?main.children.indexOf(layer):-1;
+// An instance's layers match its main component's one for one, so its bleed and trim layers sit where the main component's do.
+async function layerOf(node,find) {
+ if(node.type!=='INSTANCE')return find(node);
+ const main=await node.getMainComponentAsync(),layer=main&&find(main),i=layer?main.children.indexOf(layer):-1;
  return i>=0&&node.children[i]&&node.children[i].name===layer.name?node.children[i]:null;
 }
-// An instance may be resized or scaled, so its bleed is measured from the layer rather than read from the main component.
+const bleedLayerOf=node=>layerOf(node,bleedLayer);
+// An instance may be resized or scaled, so its bleed is measured from the layer, then scaled from the main component's whole-pixel layer to its exact bleed.
 async function bleedOfNode(node) {
  if(node.type!=='INSTANCE')return bleedOf(node);
- const layer=await bleedLayerOf(node),bleed=layer?(layer.width-node.width)/2:0;
+ const layer=await bleedLayerOf(node);let bleed=layer?(layer.width-node.width)/2:0;
+ const main=bleed>0?await node.getMainComponentAsync():null,mainLayer=main&&bleedLayer(main),drawn=mainLayer?(mainLayer.width-main.width)/2:0;
+ if(drawn>0)bleed*=bleedOf(main)/drawn;
  return bleed>0.001?Math.round(bleed*1000)/1000:0;
 }
 // The main component is offered as the place to add bleed, unless it comes from a library.
@@ -40,7 +46,17 @@ async function describe(n) {
 // Selection changes can overlap while main components load, so only the latest one is posted.
 let selectionId=0;
 async function selection() { const id=++selectionId,frames=await Promise.all(figma.currentPage.selection.map(describe));if(id===selectionId)figma.ui.postMessage({type:'selection',frames}); }
-figma.on('selectionchange',selection);
+// Layers added to a frame land above its trim outline, so the outline moves back on top. Instances follow their main component.
+function keepTrimOnTop(frame) {
+ if(!frame||frame.removed||frame.type==='INSTANCE'||!PRINTABLE.includes(frame.type))return;
+ const trim=trimLayer(frame);if(trim&&frame.children[frame.children.length-1]!==trim)frame.appendChild(trim);
+}
+function watchPage(page) {
+ if(!page||typeof page.on!=='function')return;
+ page.on('nodechange',event=>{for(const change of event.nodeChanges){const node=change.node;try{if(change.type!=='DELETE'&&node&&!node.removed)keepTrimOnTop(node.parent);}catch(error){/* The layer went away mid-change. */}}});
+}
+watchPage(figma.currentPage);figma.on('currentpagechange',()=>watchPage(figma.currentPage));
+figma.on('selectionchange',()=>{for(const n of figma.currentPage.selection)try{keepTrimOnTop(n.parent);}catch(error){/* Leave the order alone. */}selection();});
 // Figma rasterises these effects at 144 ppi in PDF exports. Other effect types are untested.
 const EFFECTS=['DROP_SHADOW','INNER_SHADOW','LAYER_BLUR','BACKGROUND_BLUR'];
 // Figma's PDF export can't draw these, so layers that use them are swapped for a 300 ppi PNG of the layer in the scaled copy.
@@ -103,7 +119,7 @@ async function rasterise(original,copy,state,topLevel=false) {
 }
 // Returns the PDF and the factor its page must be scaled down by. The copy never touches the original.
 // print is how much a custom page size scales the frame; effects are rendered for that size.
-// A frame with bleed is exported from a copy inside a clipping frame of trim plus bleed, without the bleed layer's guide outline.
+// A frame with bleed is exported from a copy inside a clipping frame of trim plus bleed, without the bleed layer's guide outline or the trim outline.
 async function exportFrame(node,found,bleed=0,print=1) {
  if(!found.effects&&!bleed)return {pdf:await node.exportAsync({format:'PDF'}),scale:1};
  const width=node.width+2*bleed,height=node.height+2*bleed;
@@ -113,7 +129,7 @@ async function exportFrame(node,found,bleed=0,print=1) {
   copy=node.clone();
   if(bleed){
    wrapper=figma.createFrame();wrapper.name=node.name;wrapper.fills=[];wrapper.clipsContent=true;figma.currentPage.appendChild(wrapper);wrapper.resize(width,height);
-   wrapper.appendChild(copy);copy.x=bleed;copy.y=bleed;const guide=await bleedLayerOf(copy);if(guide)guide.strokes=[];
+   wrapper.appendChild(copy);copy.x=bleed;copy.y=bleed;const guide=await bleedLayerOf(copy),trim=await layerOf(copy,trimLayer);if(guide)guide.strokes=[];if(trim)trim.visible=false;
   }else figma.currentPage.appendChild(copy);
   const target=wrapper||copy;if(scale!==1)target.rescale(scale);copied=true;
   const state={images:[],print},ppi=found.effects?Math.min(Math.round(EFFECT_PPI*scale/print),found.raster?await rasterise(node,copy,state,true):Infinity):null;
@@ -128,7 +144,7 @@ async function exportFrame(node,found,bleed=0,print=1) {
  }
  finally{if(wrapper&&!wrapper.removed)wrapper.remove();else if(copy&&!copy.removed)copy.remove();}
 }
-// Puts the bleed on the canvas: the frame's fills move onto a locked layer of trim plus bleed with a dashed guide outline, and Clip content turns off so artwork past the edge shows. Running it again resizes the layer.
+// Puts the bleed on the canvas: the frame's fills move onto a locked layer of trim plus bleed with a dashed guide outline, and Clip content turns off so artwork past the edge shows. A solid outline on top marks the trim. Running it again resizes the layer.
 function showBleed(frame,bleed) {
  let layer=bleedLayer(frame);
  if(!layer){
@@ -138,13 +154,24 @@ function showBleed(frame,bleed) {
   layer.strokes=[BLEED_GUIDE];layer.strokeWeight=1;layer.strokeAlign='OUTSIDE';layer.dashPattern=[4,4];
   frame.setPluginData(BLEED_KEY+'-clip',frame.clipsContent?'true':'false');frame.clipsContent=false;
  }
- layer.locked=false;layer.resize(frame.width+2*bleed,frame.height+2*bleed);layer.x=-bleed;layer.y=-bleed;
+ // On the canvas the bleed rounds to the nearest whole pixel, at least 1, so its edge sits on the pixel grid like the frame (3 mm shows as 9 px, not 8.5). Export cuts it to the exact bleed.
+ const drawn=Math.max(1,Math.round(bleed));
+ layer.locked=false;layer.resize(frame.width+2*drawn,frame.height+2*drawn);layer.x=-drawn;layer.y=-drawn;
  layer.constraints={horizontal:'STRETCH',vertical:'STRETCH'};layer.setPluginData(BLEED_KEY,String(bleed));layer.locked=true;
+ // Frames given bleed before the trim outline existed get one the next time bleed is set.
+ if(!trimLayer(frame)){
+  const trim=figma.createRectangle();trim.name='Trim';frame.appendChild(trim);
+  if(frame.layoutMode&&frame.layoutMode!=='NONE')trim.layoutPositioning='ABSOLUTE';
+  trim.fills=[];trim.strokes=[TRIM_GUIDE];trim.strokeWeight=1;trim.strokeAlign='CENTER';
+  trim.resize(frame.width,frame.height);trim.x=0;trim.y=0;trim.constraints={horizontal:'STRETCH',vertical:'STRETCH'};
+  trim.setPluginData(TRIM_KEY,'true');trim.locked=true;
+ }
 }
 // Undoes showBleed, keeping any change made to the background on the bleed layer.
 function hideBleed(frame) {
  const layer=bleedLayer(frame);if(!layer)return;
  frame.fills=layer.fills;layer.remove();
+ const trim=trimLayer(frame);if(trim)trim.remove();
  frame.clipsContent=frame.getPluginData(BLEED_KEY+'-clip')!=='false';frame.setPluginData(BLEED_KEY+'-clip','');
 }
 async function runExport(ids,id,prints) {
