@@ -117,11 +117,11 @@ footer{flex:none;border-top:1px solid var(--border)}
 @keyframes spin{to{transform:rotate(360deg)}}
 </style></head><body>
 <main>
-<section><div class="head"><h2>Frames</h2><span class="meta" id="frame-count"></span></div><ol id="frames"><li class="empty">Select one or more frames on the canvas.</li></ol></section>
+<section><div class="head"><h2>Frames</h2><span class="meta" id="frame-count"></span></div><ol id="frames"><li class="empty">Select frames or components on the canvas.</li></ol></section>
 <section><div class="head"><h2>Page size</h2><select id="units" class="compact" aria-label="Units"><option value="mm">mm</option><option value="in">in</option></select></div>
 <div class="dims"><label class="field" id="width-field" title="Width"><span class="prefix" aria-hidden="true">W</span><input id="width" type="number" min="10" max="2000" step=".01" aria-label="Width"><span class="suffix" id="width-unit">mm</span></label><label class="field" id="height-field" title="Height"><span class="prefix" aria-hidden="true">H</span><input id="height" type="number" min="10" max="2000" step=".01" aria-label="Height"><span class="suffix" id="height-unit">mm</span></label></div>
 <p class="hint error" id="size-error"></p>
-<p class="hint" id="size-hint">Select frames to calculate their print size.</p>
+<p class="hint" id="size-hint">Select frames or components to calculate their print size.</p>
 <button id="size-reset" class="link reset" hidden>Reset to frame size</button>
 <div class="match" id="size-match" hidden><span id="size-match-text"></span><button id="size-snap" class="link"></button></div></section>
 <section id="bleed-section" class="collapsed"><div class="head toggle" id="bleed-head"><h2>Bleed</h2><button id="bleed-toggle" class="icon"></button></div>

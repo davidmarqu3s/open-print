@@ -15,13 +15,17 @@ function status(text,tone=''){
 }
 // A finished or failed export's message describes the old settings, so drop it once they change.
 function clearResult(){if(busy||downloadQueue)return;issues=[];if(el('status').className!=='busy')status('');}
+// Figma's layer icons. A component is four diamonds, an instance one hollow diamond.
+const COMPONENT_ICON='<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 2.2 10 4.2 8 6.2 6 4.2zM8 9.8 10 11.8 8 13.8 6 11.8zM4.2 6 6.2 8 4.2 10 2.2 8zM11.8 6 13.8 8 11.8 10 9.8 8z"/></svg>',INSTANCE_ICON='<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M8 2.3 13.7 8 8 13.7 2.3 8zm0 1.4L3.7 8 8 12.3 12.3 8z"/></svg>';
+// Frames, components and instances export. Bleed is added to frames and components; an instance takes its main component's.
+const printable=f=>f.type==='FRAME'||f.type==='COMPONENT'||f.type==='INSTANCE',editable=f=>f.type==='FRAME'||f.type==='COMPONENT';
 const FRAME_ICON='<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M5.5 2v2.5H3v1h2.5v5H3v1h2.5V14h1v-2.5h5V14h1v-2.5H15v-1h-2.5v-5H15v-1h-2.5V2h-1v2.5h-5V2zm1 3.5h5v5h-5z"/></svg>',WARNING_ICON='<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 2.5 14 13H2zm-.5 4v3h1v-3zm0 4v1h1v-1z"/></svg>';
 const formatSize=size=>{const value=mm=>unit==='in'?Math.round(mm/25.4*100)/100:mm;return value(size.width)+' × '+value(size.height)+' '+unit;};
 const PLUS_ICON='<svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M11.5 7h1v4.5H17v1h-4.5V17h-1v-4.5H7v-1h4.5z"/></svg>',MINUS_ICON='<svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 11.5h10v1H7z"/></svg>';
 // A + or − header button, named by its tooltip.
 function setToggle(id,on,label){const button=el(id);if(button.on!==on){button.innerHTML=on?MINUS_ICON:PLUS_ICON;button.on=on;}button.title=label;button.ariaLabel=label;}
 // Bleed arrives from the canvas in frame units, 72 to the inch.
-const frameBleed=frame=>frame.type==='FRAME'&&frame.bleed>0?Math.round(frame.bleed*25.4/72*100)/100:0;
+const frameBleed=frame=>printable(frame)&&frame.bleed>0?Math.round(frame.bleed*25.4/72*100)/100:0;
 const formatLength=mm=>(unit==='in'?Math.round(mm/25.4*1000)/1000:mm)+' '+unit;
 const marksOn=()=>marksEnabled,pdfxOn=()=>el('pdfx').checked&&!!profile;
 // A custom page size scales each frame to fit, so the bleed that reaches the PDF shrinks with it.
@@ -38,7 +42,7 @@ function bleedProblem(){return Number.isFinite(bleedSetting)&&bleedSetting>0&&bl
 function showLengths(){el('bleed').value=displayDimension(bleedSetting);el('mark-offset').value=displayDimension(marks.offset);el('mark-length').value=displayDimension(marks.length);el('mark-weight').value=marks.weight;for(const id of ['bleed','mark-offset','mark-length']){el(id).step=unit==='in'?'.01':'.5';}}
 // The finished sheet: trim plus the bleed, or plus the marks' offset and length.
 function sheetHint(){
- const valid=frames.filter(f=>f.type==='FRAME'),bleeds=[...new Set(valid.map(pdfBleed))];
+ const valid=frames.filter(printable),bleeds=[...new Set(valid.map(pdfBleed))];
  if(!valid.length||(!marksOn()&&bleeds.every(b=>!b)))return '';
  if(dimensions.width===null||dimensions.height===null||bleeds.length>1||marksProblem()||scaleProblem().text)return '';
  const margin=PrintCore.margin(bleeds[0],marksOn()?marks:null),round=v=>Math.round(v*100)/100;
@@ -61,23 +65,28 @@ function renderIssues(frame){
  }
  if(own.length>ISSUES_PER_FRAME){const li=document.createElement('li');li.className='issue more';li.textContent='+'+(own.length-ISSUES_PER_FRAME)+' more in this frame';el('frames').append(li);}
 }
-function renderFrames(){el('frames').replaceChildren();el('frames').className=issues.length?'expanded':'';if(!frames.length){const li=document.createElement('li');li.className='empty';li.textContent='Select one or more frames on the canvas.';el('frames').append(li);}for(const frame of frames){const valid=frame.type==='FRAME',li=document.createElement('li'),size=document.createElement('span');li.className=valid?'':'invalid';li.innerHTML=valid?FRAME_ICON:WARNING_ICON;size.className='size';// Page size and Bleed already give the sizes, so a frame row is just its name; only a non-frame says why it's flagged.
-li.append(nameNode(frame.name));if(!valid){size.textContent='Not a frame';li.append(size);}el('frames').append(li);renderIssues(frame);}}
+function renderFrames(){el('frames').replaceChildren();el('frames').className=issues.length?'expanded':'';if(!frames.length){const li=document.createElement('li');li.className='empty';li.textContent='Select frames or components on the canvas.';el('frames').append(li);}for(const frame of frames){const valid=printable(frame),li=document.createElement('li'),size=document.createElement('span');li.className=valid?'':'invalid';li.innerHTML=!valid?WARNING_ICON:frame.type==='COMPONENT'?COMPONENT_ICON:frame.type==='INSTANCE'?INSTANCE_ICON:FRAME_ICON;size.className='size';// Page size and Bleed already give the sizes, so a frame row is just its name; only a non-frame says why it's flagged.
+li.append(nameNode(frame.name));if(!valid){size.textContent='Not a frame or component';li.append(size);}el('frames').append(li);renderIssues(frame);}}
 function sizeProblem(){if(autoSize)return '';if(dimensions.width===null||dimensions.height===null)return 'Enter a width and height.';try{PrintCore.points(dimensions.width);PrintCore.points(dimensions.height);return '';}catch(error){return error.message;}}
 function fieldInvalid(id){if(autoSize||dimensions[id]===null)return false;try{PrintCore.points(dimensions[id]);return false;}catch(error){return true;}}
 function profileProblem(){if(el('profile-mode').value==='none'||profile)return '';const entry=PROFILE_CATALOG.find(p=>p.id===el('profile-mode').value);return entry?'Import '+entry.name+' to export.':'Choose a CMYK profile to export.';}
-function refresh(){const invalid=frames.filter(f=>f.type!=='FRAME'),problem=sizeProblem(),count=frames.length-invalid.length,separate=el('export-mode').value==='separate';const marking=marksProblem(),scaling=scaleProblem().text;el('export').disabled=busy||!!downloadQueue||!!profileProblem()||!frames.length||invalid.length>0||!!problem||!!marking||!!scaling;el('export').textContent=busy?'Exporting…':count<2?'Export CMYK PDF':separate?'Export '+count+' CMYK PDFs':'Export '+count+'-page CMYK PDF';el('export-hint').textContent=busy?'':!frames.length?'':invalid.length?'Only frames can be exported. Deselect '+(invalid.length===1?'“'+invalid[0].name+'”':invalid.length+' layers')+'.':problem?'':marking?'Fix the crop mark settings to export.':scaling?'Fix the bleed to export.':profileProblem();
+function refresh(){const invalid=frames.filter(f=>!printable(f)),problem=sizeProblem(),count=frames.length-invalid.length,separate=el('export-mode').value==='separate';const marking=marksProblem(),scaling=scaleProblem().text;el('export').disabled=busy||!!downloadQueue||!!profileProblem()||!frames.length||invalid.length>0||!!problem||!!marking||!!scaling;el('export').textContent=busy?'Exporting…':count<2?'Export CMYK PDF':separate?'Export '+count+' CMYK PDFs':'Export '+count+'-page CMYK PDF';el('export-hint').textContent=busy?'':!frames.length?'':invalid.length?'Only frames and components can be exported. Deselect '+(invalid.length===1?'“'+invalid[0].name+'”':invalid.length+' layers')+'.':problem?'':marking?'Fix the crop mark settings to export.':scaling?'Fix the bleed to export.':profileProblem();
  const widthInvalid=fieldInvalid('width'),heightInvalid=fieldInvalid('height');el('width-field').className='field'+(widthInvalid?' invalid':'');el('height-field').className='field'+(heightInvalid?' invalid':'');el('size-error').textContent=problem;el('size-error').className='hint'+(widthInvalid||heightInvalid?' error':'');el('size-snap').disabled=busy||!!downloadQueue;el('frame-count').textContent=!frames.length?'':invalid.length?frames.length+' selected':frames.length+(frames.length===1?' page':' pages');el('cancel').hidden=!busy;el('cancel').textContent='Cancel';el('profile').disabled=busy||!!downloadQueue;el('profile-mode').disabled=busy||!!downloadQueue;el('width').disabled=busy||!!downloadQueue;el('height').disabled=busy||!!downloadQueue;el('size-reset').disabled=busy||!!downloadQueue;el('units').disabled=busy||!!downloadQueue;el('export-options').hidden=count<2;el('export-mode').disabled=busy||!!downloadQueue;
  const locked=busy||!!downloadQueue,bleeds=frames.map(frameBleed).filter(b=>b),shown=[...new Set(bleeds)];
  // The header button is − once every selected frame has bleed, otherwise +. The amount shows once any frame has bleed, and editing it resizes that bleed.
- const all=count&&bleeds.length===count,anyBleed=bleeds.length>0;
- setToggle('bleed-toggle',all,all?'Remove bleed':'Add bleed');el('bleed-toggle').disabled=locked||!count||(!all&&anyBleed&&!!bleedProblem());
- el('bleed-options').hidden=!anyBleed;el('bleed-section').className=anyBleed?'':'collapsed';el('bleed').disabled=locked;
+ // Instances can't take new layers, so the button acts on frames and components only, and instances show their main component's bleed.
+ const owners=frames.filter(editable),instances=frames.filter(f=>f.type==='INSTANCE'),anyBleed=bleeds.length>0;
+ const all=owners.length?owners.every(frameBleed):count>0&&bleeds.length===count;
+ setToggle('bleed-toggle',all,!owners.length&&instances.length?'Add bleed to the main component':all?'Remove bleed':'Add bleed');el('bleed-toggle').disabled=locked||!owners.length||(!all&&anyBleed&&!!bleedProblem());
+ el('bleed-options').hidden=!anyBleed;el('bleed-section').className=anyBleed?'':'collapsed';el('bleed').disabled=locked||!owners.length;
  el('bleed-field').className='field plain'+(bleedProblem()?' invalid':'');
  el('bleed-hint').textContent=!anyBleed?'':bleedProblem()||(shown.length>1?'Bleed varies between frames: '+shown.map(formatLength).join(', ')+'.':bleeds.length<count?bleeds.length+' of '+count+' frames '+(bleeds.length===1?'has':'have')+' bleed.':'');
  el('bleed-hint').className='hint'+(bleedProblem()?' error':'');
  // Bleed that a smaller page size would shrink too far has one fix: more bleed on the canvas.
- const scaled=scaleProblem();if(scaled.text&&!bleedProblem()){el('bleed-hint').className='hint error';el('bleed-hint').replaceChildren(document.createTextNode(scaled.text+' '));if(!locked){const fix=document.createElement('button');fix.className='link';fix.textContent='Use '+formatLength(scaled.needed)+' bleed';fix.onclick=()=>parent.postMessage({pluginMessage:{type:'show-bleed',ids:frames.filter(f=>frameBleed(f)).map(f=>f.id),bleed:scaled.needed*72/25.4}},'*');el('bleed-hint').append(fix);}}
+ const scaled=scaleProblem();if(scaled.text&&!bleedProblem()){el('bleed-hint').className='hint error';el('bleed-hint').replaceChildren(document.createTextNode(scaled.text+' '));if(!locked){const fix=document.createElement('button');fix.className='link';fix.textContent='Use '+formatLength(scaled.needed)+' bleed';fix.onclick=()=>parent.postMessage({pluginMessage:{type:'show-bleed',ids:frames.filter(f=>editable(f)&&frameBleed(f)).map(f=>f.id),bleed:scaled.needed*72/25.4}},'*');el('bleed-hint').append(fix);}}
+ // An instance without bleed gets it from its main component, so point there.
+ const bare=instances.filter(f=>!frameBleed(f)),mains=[...new Set(bare.map(f=>f.mainId).filter(Boolean))];
+ if(bare.length&&!el('bleed-hint').textContent){el('bleed-hint').className='hint';el('bleed-hint').replaceChildren(document.createTextNode((bare.length===1?'This instance takes':'Instances take')+' bleed from '+(mains.length>1?'their main components.':bare.length===1?'its main component.':'their main component.')+(mains.length===1&&!locked?' ':'')));if(mains.length===1&&!locked){const go=document.createElement('button');go.className='link';go.textContent='Select main component';go.onclick=()=>parent.postMessage({pluginMessage:{type:'select-layer',id:mains[0]}},'*');el('bleed-hint').append(go);}}
  setToggle('marks-toggle',marksOn(),marksOn()?'Remove crop marks':'Add crop marks');el('marks-toggle').disabled=locked||(!count&&!marksOn());
  el('marks-options').hidden=!marksOn();el('marks-section').className=marksOn()?'':'collapsed';for(const id of ['mark-offset','mark-length','mark-weight'])el(id).disabled=locked;
  el('marks-error').textContent=marking;
@@ -89,14 +98,14 @@ function refresh(){const invalid=frames.filter(f=>f.type!=='FRAME'),problem=size
  el('pdfx').disabled=locked||!profile;el('pure-black').disabled=locked;el('pdfx-hint').textContent=profile||!el('pdfx').checked?'':'PDF/X-4 needs a color profile.';}
 function stop(){if(engineAbort){engineAbort.abort();engineAbort=null;}if(worker){worker.terminate();worker=null;}busy=false;job=null;refresh();parent.postMessage({pluginMessage:{type:'ready'}},'*');}
 function updateSize(){
- const valid=frames.filter(f=>f.type==='FRAME');
+ const valid=frames.filter(printable);
  if(autoSize){
   const sizes=valid.map(f=>PrintCore.frameSize(f.width,f.height));
   const same=sizes.length && sizes.every(s=>s.width===sizes[0].width && s.height===sizes[0].height);
   dimensions={width:same?sizes[0].width:null,height:same?sizes[0].height:null};
   el('width').value=displayDimension(dimensions.width);el('height').value=displayDimension(dimensions.height);
   el('width').placeholder=sizes.length?'Varies':'';el('height').placeholder=sizes.length?'Varies':'';
-  el('size-hint').textContent=!sizes.length?'Select frames to calculate their print size.':same?'':'Each PDF page uses its own frame’s size. Enter dimensions to override all pages.';
+  el('size-hint').textContent=!sizes.length?'Select frames or components to calculate their print size.':same?'':'Each PDF page uses its own frame’s size. Enter dimensions to override all pages.';
   showPaperMatch(same?paperMatch(sizes[0]):null);
  }else{
   // Every page takes your size, and each frame scales to fit it, centred.
@@ -128,11 +137,11 @@ el('marks-toggle').onclick=()=>{marksEnabled=!marksEnabled;clearResult();refresh
 // Clicking anywhere on a header row does what its button does. A click on the button itself is left to the button: it redraws its icon, so the clicked element has left the page by the time the click reaches the row.
 for(const [head,button] of [['bleed-head','bleed-toggle'],['marks-head','marks-toggle']])el(head).onclick=event=>{if(event&&event.composedPath&&event.composedPath().includes(el(button)))return;if(!el(button).disabled)el(button).onclick();};
 el('pdfx').onchange=el('pure-black').onchange=()=>{clearResult();refresh();};
-const frameIds=()=>frames.filter(f=>f.type==='FRAME').map(f=>f.id),allBleed=()=>{const valid=frames.filter(f=>f.type==='FRAME');return valid.length>0&&valid.every(frameBleed);};
+const frameIds=()=>frames.filter(editable).map(f=>f.id),allBleed=()=>{const valid=frames.filter(editable);return valid.length>0&&valid.every(frameBleed);};
 const addBleed=()=>{if(bleedProblem())return;parent.postMessage({pluginMessage:{type:'show-bleed',ids:frameIds(),bleed:bleedSetting*72/25.4}},'*');};
 el('bleed-toggle').onclick=()=>{if(allBleed())parent.postMessage({pluginMessage:{type:'hide-bleed',ids:frameIds()}},'*');else{if(bleedProblem()&&el('bleed-options').hidden){bleedSetting=3;showLengths();}addBleed();}};
 // A committed amount (Enter or leaving the field) resizes bleed the selection already has.
-el('bleed').onchange=()=>{if(busy||downloadQueue)return;if(allBleed()&&frames.some(f=>f.type==='FRAME'&&frameBleed(f)!==bleedSetting))addBleed();};
+el('bleed').onchange=()=>{if(busy||downloadQueue)return;if(allBleed()&&frames.some(f=>editable(f)&&frameBleed(f)!==bleedSetting))addBleed();};
 showLengths();
 for(const id of ['width','height'])el(id).oninput=()=>{dimensions[id]=el(id).value===''?null:Number(el(id).value)*(unit==='in'?25.4:1);autoSize=false;clearResult();updateSize();};
 el('profile').onchange=async event=>{const generation=++profileRead;const mode=el('profile-mode').value;try{const file=event.target.files[0];if(!file)return;profile=null;refresh();if(file.size>5*1024*1024)throw new Error('ICC profile is too large.');const bytes=new Uint8Array(await file.arrayBuffer());if(generation!==profileRead)return;PrintCore.validateICC(bytes);const name=PrintCore.profileDescription(bytes);const entry=PROFILE_CATALOG.find(p=>p.id===mode);if(entry && name!==entry.name)throw new Error('Choose '+entry.name+'. This file contains '+(name||'an unnamed profile')+'.');if(entry){const encoded=encodeProfile(bytes);profiles[mode]=encoded;parent.postMessage({pluginMessage:{type:'save-profile',id:mode,encoded}},'*');}else{customProfile=bytes;customName=name||file.name;}chooseProfile();}catch(error){if(generation!==profileRead)return;status(error.message,'error');}refresh();};
