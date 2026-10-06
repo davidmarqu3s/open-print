@@ -1,5 +1,5 @@
 const el=id=>document.getElementById(id);let frames=[],profile=null,profileName='',worker=null,busy=false,job=null,profileRead=0,customProfile=null,customName='',engineAbort=null;
-let unit='mm',dimensions={width:null,height:null},autoSize=true,bleedSetting=3,marks={offset:3,length:5,weight:0.25},downloadUrls=[],downloadQueue=null,issues=[],selectionKey='';
+let unit='mm',dimensions={width:null,height:null},autoSize=true,bleedSetting=3,marksEnabled=false,marks={offset:3,length:5,weight:0.25},downloadUrls=[],downloadQueue=null,issues=[],selectionKey='';
 const displayDimension=value=>value===null?'':unit==='in'?Math.round(value/25.4*1e6)/1e6:value;
 const profiles={...BUNDLED_PROFILES};
 const decodeProfile=OpenPrintAssets.decodeProfile;
@@ -17,10 +17,13 @@ function status(text,tone=''){
 function clearResult(){if(busy||downloadQueue)return;issues=[];if(el('status').className!=='busy')status('');}
 const FRAME_ICON='<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M5.5 2v2.5H3v1h2.5v5H3v1h2.5V14h1v-2.5h5V14h1v-2.5H15v-1h-2.5v-5H15v-1h-2.5V2h-1v2.5h-5V2zm1 3.5h5v5h-5z"/></svg>',WARNING_ICON='<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 2.5 14 13H2zm-.5 4v3h1v-3zm0 4v1h1v-1z"/></svg>';
 const formatSize=size=>{const value=mm=>unit==='in'?Math.round(mm/25.4*100)/100:mm;return value(size.width)+' × '+value(size.height)+' '+unit;};
+const PLUS_ICON='<svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M11.5 7h1v4.5H17v1h-4.5V17h-1v-4.5H7v-1h4.5z"/></svg>',MINUS_ICON='<svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 11.5h10v1H7z"/></svg>';
+// A + or − header button, named by its tooltip.
+function setToggle(id,on,label){const button=el(id);if(button.on!==on){button.innerHTML=on?MINUS_ICON:PLUS_ICON;button.on=on;}button.title=label;button.ariaLabel=label;}
 // Bleed arrives from the canvas in frame units, 72 to the inch.
 const frameBleed=frame=>frame.type==='FRAME'&&frame.bleed>0?Math.round(frame.bleed*25.4/72*100)/100:0;
 const formatLength=mm=>(unit==='in'?Math.round(mm/25.4*1000)/1000:mm)+' '+unit;
-const marksOn=()=>el('marks').checked,pdfxOn=()=>el('pdfx').checked&&!!profile;
+const marksOn=()=>marksEnabled,pdfxOn=()=>el('pdfx').checked&&!!profile;
 function marksProblem(){return marksOn()?PrintCore.marksProblem(marks,Math.max(0,...frames.map(frameBleed))):'';}
 function bleedProblem(){return Number.isFinite(bleedSetting)&&bleedSetting>0&&bleedSetting<=20?'':'Enter a bleed between 0 and 20 mm.';}
 function showLengths(){el('bleed').value=displayDimension(bleedSetting);el('mark-offset').value=displayDimension(marks.offset);el('mark-length').value=displayDimension(marks.length);el('mark-weight').value=marks.weight;for(const id of ['bleed','mark-offset','mark-length']){el(id).step=unit==='in'?'.01':'.5';}}
@@ -56,18 +59,20 @@ function profileProblem(){if(el('profile-mode').value==='none'||profile)return '
 function refresh(){const invalid=frames.filter(f=>f.type!=='FRAME'),problem=sizeProblem(),count=frames.length-invalid.length,separate=el('export-mode').value==='separate';const marking=marksProblem();el('export').disabled=busy||!!downloadQueue||!!profileProblem()||!frames.length||invalid.length>0||!!problem||!!marking;el('export').textContent=busy?'Exporting…':count<2?'Export CMYK PDF':separate?'Export '+count+' CMYK PDFs':'Export '+count+'-page CMYK PDF';el('export-hint').textContent=busy?'':!frames.length?'Select frames to export.':invalid.length?'Only frames can be exported. Deselect '+(invalid.length===1?'“'+invalid[0].name+'”':invalid.length+' layers')+'.':problem?'':marking?'Fix the crop mark settings to export.':profileProblem();
  const widthInvalid=fieldInvalid('width'),heightInvalid=fieldInvalid('height');el('width-field').className='field'+(widthInvalid?' invalid':'');el('height-field').className='field'+(heightInvalid?' invalid':'');el('size-error').textContent=problem;el('size-error').className='hint'+(widthInvalid||heightInvalid?' error':'');el('size-snap').disabled=busy||!!downloadQueue;el('frame-count').textContent=!frames.length?'':invalid.length?frames.length+' selected':frames.length+(frames.length===1?' page':' pages');el('cancel').hidden=!busy;el('cancel').textContent='Cancel';el('profile').disabled=busy||!!downloadQueue;el('profile-mode').disabled=busy||!!downloadQueue;el('width').disabled=busy||!!downloadQueue;el('height').disabled=busy||!!downloadQueue;el('size-reset').disabled=busy||!!downloadQueue;el('units').disabled=busy||!!downloadQueue;el('export-options').hidden=count<2;el('export-mode').disabled=busy||!!downloadQueue;
  const locked=busy||!!downloadQueue,bleeds=frames.map(frameBleed).filter(b=>b),shown=[...new Set(bleeds)];
- // One button: Remove bleed once every selected frame has it, otherwise Add bleed. Editing the field resizes bleed that is already there.
- const all=count&&bleeds.length===count;
- el('bleed-toggle').textContent=all?'Remove bleed':'Add bleed';el('bleed-toggle').disabled=locked||!count||(!all&&!!bleedProblem());
- el('bleed-toggle').title=all?'Remove the Bleed layer and put the background back on the frame':'';el('bleed').disabled=locked;
+ // The header button is − once every selected frame has bleed, otherwise +. The amount shows once any frame has bleed, and editing it resizes that bleed.
+ const all=count&&bleeds.length===count,anyBleed=bleeds.length>0;
+ setToggle('bleed-toggle',all,all?'Remove bleed':'Add bleed');el('bleed-toggle').disabled=locked||!count||(!all&&anyBleed&&!!bleedProblem());
+ el('bleed-options').hidden=!anyBleed;el('bleed-section').className=anyBleed?'':'collapsed';el('bleed').disabled=locked;
  el('bleed-field').className='field plain'+(bleedProblem()?' invalid':'');
- el('bleed-hint').textContent=!count?'':bleedProblem()||(!bleeds.length?'Adds a Bleed layer around each frame on the canvas. Drag images past the frame edge to fill it.':shown.length>1?'Bleed varies between frames: '+shown.map(formatLength).join(', ')+'.':bleeds.length<count?bleeds.length+' of '+count+' frames '+(bleeds.length===1?'has':'have')+' bleed.':'Change the amount to resize the bleed.');
+ el('bleed-hint').textContent=!anyBleed?'':bleedProblem()||(shown.length>1?'Bleed varies between frames: '+shown.map(formatLength).join(', ')+'.':bleeds.length<count?bleeds.length+' of '+count+' frames '+(bleeds.length===1?'has':'have')+' bleed.':'Drag images past the frame edge to fill the bleed.');
  el('bleed-hint').className='hint'+(bleedProblem()?' error':'');
- el('marks-options').hidden=!marksOn();el('marks').disabled=locked;for(const id of ['mark-offset','mark-length','mark-weight'])el(id).disabled=locked;
+ setToggle('marks-toggle',marksOn(),marksOn()?'Remove crop marks':'Add crop marks');el('marks-toggle').disabled=locked;
+ el('marks-options').hidden=!marksOn();el('marks-section').className=marksOn()?'':'collapsed';for(const id of ['mark-offset','mark-length','mark-weight'])el(id).disabled=locked;
  el('marks-error').textContent=marking;
  // An offset inside the bleed has one obvious fix, so offer it.
  const needed=Math.max(0,...frames.map(frameBleed));if(/at least the bleed/.test(marking)&&!locked){const fix=document.createElement('button');fix.className='link';fix.textContent='Use '+formatLength(needed);fix.onclick=()=>{marks.offset=needed;showLengths();clearResult();refresh();};el('marks-error').replaceChildren(document.createTextNode(marking+' '),fix);}el('mark-offset-field').className='field plain'+(/Offset/.test(marking)?' invalid':'');el('mark-length-field').className='field plain'+(/Length/.test(marking)?' invalid':'');el('mark-weight-field').className='field plain'+(/Thickness/.test(marking)?' invalid':'');
- el('sheet-hint').textContent=sheetHint();el('sheet-hint').hidden=!el('sheet-hint').textContent;
+ // The page size sits under the last section that is on.
+ el('sheet-hint').textContent=sheetHint();el('sheet-hint').hidden=!el('sheet-hint').textContent;if(!marksOn()&&anyBleed)el('bleed-section').append(el('sheet-hint'));else el('marks-section').append(el('sheet-hint'));
  // PDF/X needs an output intent, so it waits for a profile.
  el('pdfx').disabled=locked||!profile;el('pure-black').disabled=locked;el('pdfx-hint').textContent=profile||!el('pdfx').checked?'':'PDF/X-4 needs a color profile.';}
 function stop(){if(engineAbort){engineAbort.abort();engineAbort=null;}if(worker){worker.terminate();worker=null;}busy=false;job=null;refresh();parent.postMessage({pluginMessage:{type:'ready'}},'*');}
@@ -102,11 +107,11 @@ el('bleed').oninput=()=>{bleedSetting=readLength('bleed');refresh();};
 el('mark-offset').oninput=()=>{marks.offset=readLength('mark-offset');clearResult();refresh();};
 el('mark-length').oninput=()=>{marks.length=readLength('mark-length');clearResult();refresh();};
 el('mark-weight').oninput=()=>{marks.weight=el('mark-weight').value===''?NaN:Number(el('mark-weight').value);clearResult();refresh();};
-el('marks').onchange=()=>{clearResult();refresh();};
+el('marks-toggle').onclick=()=>{marksEnabled=!marksEnabled;clearResult();refresh();};
 el('pdfx').onchange=el('pure-black').onchange=()=>{clearResult();refresh();};
 const frameIds=()=>frames.filter(f=>f.type==='FRAME').map(f=>f.id),allBleed=()=>{const valid=frames.filter(f=>f.type==='FRAME');return valid.length>0&&valid.every(frameBleed);};
 const addBleed=()=>{if(bleedProblem())return;parent.postMessage({pluginMessage:{type:'show-bleed',ids:frameIds(),bleed:bleedSetting*72/25.4}},'*');};
-el('bleed-toggle').onclick=()=>{if(allBleed())parent.postMessage({pluginMessage:{type:'hide-bleed',ids:frameIds()}},'*');else addBleed();};
+el('bleed-toggle').onclick=()=>{if(allBleed())parent.postMessage({pluginMessage:{type:'hide-bleed',ids:frameIds()}},'*');else{if(bleedProblem()&&el('bleed-options').hidden){bleedSetting=3;showLengths();}addBleed();}};
 // A committed amount (Enter or leaving the field) resizes bleed the selection already has.
 el('bleed').onchange=()=>{if(busy||downloadQueue)return;if(allBleed()&&frames.some(f=>f.type==='FRAME'&&frameBleed(f)!==bleedSetting))addBleed();};
 showLengths();

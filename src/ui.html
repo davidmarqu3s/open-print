@@ -46,12 +46,15 @@ input[type=number]{-moz-appearance:textfield}input::-webkit-outer-spin-button,in
 .dims{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px}
 .check.below{margin-top:8px}
 .link.reset{display:block;margin-top:8px}
-.bleed-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:end}
-.labelled{display:flex;flex-direction:column;gap:4px;min-width:0}
-.field-label{color:var(--text2)}
+.labelled{display:flex;flex-direction:column;gap:2px;min-width:0}
+.field-label{font-size:10px;line-height:12px;color:var(--text2)}
 .field.plain input{padding-left:8px}
-.bleed-row button{height:24px;padding:0 8px;font-weight:400}
-.trio{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:8px}
+/* Bleed and Crop marks are added and removed from their headers, like Figma's Effects section; settings show once added. */
+section.collapsed{padding-bottom:4px}
+.icon{width:24px;height:24px;margin-right:-6px;padding:0;background:none;color:var(--icon2)}
+.icon:hover:not(:disabled){background:var(--bg-hover);color:var(--text)}
+.icon:disabled{opacity:.4}
+.trio{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
 select.native{display:none}
 select,.select{appearance:none;-webkit-appearance:none;display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;height:24px;padding:0 8px;border:1px solid transparent;border-radius:5px;background:var(--bg2);font-weight:400;text-align:left;cursor:default}
 .select-label{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -117,10 +120,10 @@ footer{flex:none;border-top:1px solid var(--border)}
 <p class="hint" id="size-hint">Select frames to infer their print size.</p>
 <button id="size-reset" class="link reset" hidden>Reset to frame size</button>
 <div class="match" id="size-match" hidden><span id="size-match-text"></span><button id="size-snap" class="link"></button></div></section>
-<section><div class="head"><h2>Bleed and marks</h2></div>
-<div class="bleed-row"><div class="labelled"><label class="field-label" for="bleed">Bleed</label><label class="field plain" id="bleed-field" title="Bleed on each side"><input id="bleed" type="number" min="0" max="20" step=".5"><span class="suffix length-unit">mm</span></label></div><button id="bleed-toggle" class="secondary">Add bleed</button></div>
-<p class="hint" id="bleed-hint"></p>
-<label class="check below"><input id="marks" type="checkbox"><span>Crop marks</span></label>
+<section id="bleed-section" class="collapsed"><div class="head"><h2>Bleed</h2><button id="bleed-toggle" class="icon"></button></div>
+<div id="bleed-options" hidden><label class="field plain" id="bleed-field" title="Bleed on each side"><input id="bleed" aria-label="Bleed on each side" type="number" min="0" max="20" step=".5"><span class="suffix length-unit">mm</span></label></div>
+<p class="hint" id="bleed-hint"></p></section>
+<section id="marks-section" class="collapsed"><div class="head"><h2>Crop marks</h2><button id="marks-toggle" class="icon"></button></div>
 <div id="marks-options" hidden><div class="trio"><div class="labelled"><label class="field-label" for="mark-offset">Offset</label><label class="field plain" id="mark-offset-field" title="Distance from the trim to the start of each mark"><input id="mark-offset" type="number" min="0" max="20" step=".5"><span class="suffix length-unit">mm</span></label></div><div class="labelled"><label class="field-label" for="mark-length">Length</label><label class="field plain" id="mark-length-field" title="Length of each mark"><input id="mark-length" type="number" min="2" max="20" step=".5"><span class="suffix length-unit">mm</span></label></div><div class="labelled"><label class="field-label" for="mark-weight">Thickness</label><label class="field plain" id="mark-weight-field" title="Line thickness of the marks"><input id="mark-weight" type="number" min=".1" max="2" step=".05"><span class="suffix">pt</span></label></div></div>
 <p class="hint error" id="marks-error"></p></div>
 <p class="hint" id="sheet-hint"></p></section>

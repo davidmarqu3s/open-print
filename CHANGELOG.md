@@ -6,6 +6,7 @@ Notable changes to Open Print. Each release’s notes are also used on GitHub Re
 
 - Pure black prints in black ink only and overprints.
 - PDF/X-4 export.
+- Bleed and crop marks are added with a + button, and their settings show once added.
 
 ## 0.1.0 – 2026-10-06
 
