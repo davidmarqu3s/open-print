@@ -151,8 +151,8 @@ function updateSize(){
  el('size-hint').hidden=!el('size-hint').textContent;el('size-reset').hidden=autoSize||!valid.length;
  refresh();
 }
-const PAPER=PrintCore.PAPER,PAPER_TOLERANCE=0.5,PAPER_TOLERANCE_SHARE=0.002;
-// Within 0.5 mm, or 0.2% on big sheets, so a whole-pixel A0 such as 2380 × 3368 still counts.
+const PAPER=PrintCore.PAPER,PAPER_TOLERANCE=1,PAPER_TOLERANCE_SHARE=0.002;
+// Within 1 mm (3 px), or 0.2% on big sheets, so a whole-pixel A0 such as 2380 × 3368 still counts.
 const near=mm=>Math.max(PAPER_TOLERANCE,mm*PAPER_TOLERANCE_SHARE);
 function paperMatch(size){for(const [name,w,h] of PAPER)for(const [width,height] of [[w,h],[h,w]])if(Math.abs(size.width-width)<=near(width)&&Math.abs(size.height-height)<=near(height))return size.width===width&&size.height===height?null:{name,width,height};return null;}
 function showPaperMatch(match){
