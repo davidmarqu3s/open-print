@@ -24,6 +24,8 @@ The profile controls the conversion and is embedded in the PDF. With **No profil
 
 Figma frames have no physical size, so the plugin uses Figma’s PDF scale of 72 frame units per inch. A 907 × 1276 frame becomes 319.97 × 450.14 mm. When a frame is within 0.5 mm (0.2% on large sheets) of a standard size, such as A3 or Letter, a **Use A3**-style button enters the exact size. A typed size applies to every page, and each frame’s artwork scales to fit it, centred. Vectors stay sharp; noise, textures and other effects are rendered for the printed size, and the low-resolution warning allows for the scale. Scaling down also shrinks the bleed, so if less than 3 mm would be left, export waits until you click **Use … bleed** to enlarge it on the canvas.
 
+To start a design at a standard size, click **+** next to **Frames** and pick a size: A0 to A6, DL, business card, 50 × 70 or 70 × 100 cm poster, Letter or Tabloid. The frame is created at the exact size in the middle of your view and selected.
+
 ## Bleed and crop marks
 
 Click **+** next to **Bleed** to add 3 mm of bleed. Each frame gets a locked **Bleed** layer holding its background, and **Clip content** is turned off, so you can drag images past the edge and see exactly what will print. The amount then appears: change it and press Return to resize the bleed. Click **−** to remove it and put everything back. The frame is always the trim size.
