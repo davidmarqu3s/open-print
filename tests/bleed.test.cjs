@@ -93,6 +93,19 @@ test('a frame with bleed exports from a clipping wrapper of trim plus bleed, wit
  // The original keeps its guide and trim outline.
  assert.equal(frame.children[0].strokes.length,1);assert.notEqual(frame.children.at(-1).visible,false);
 });
+test('a frame turned on the canvas exports as it looks there, with its bleed',async()=>{
+ // Figma's −90° turn: a 595 × 842 frame that shows as 842 × 595.
+ const {frame}=poster(),turn=[[0,-1,100],[1,0,50]];Object.assign(frame,{rotation:-90,relativeTransform:turn});
+ const {figma,messages,log}=controller([frame]);
+ await figma.ui.onmessage({type:'show-bleed',ids:['1'],bleed:8.5});
+ assert.deepEqual([messages.findLast(m=>m.type==='selection').frames[0].width,messages.findLast(m=>m.type==='selection').frames[0].height],[842,595]);
+ const clone=frame.clone;frame.clone=()=>Object.assign(clone(),{rotation:-90,relativeTransform:turn});
+ await figma.ui.onmessage({type:'export',ids:['1']});
+ const msg=messages.at(-1);assert.equal(msg.type,'pdfs',msg.text);assert.deepEqual(plain(msg.sizes),[{width:842,height:595}]);
+ const wrapper=log.exported[0],copy=wrapper.children[0];assert.deepEqual([wrapper.width,wrapper.height],[859,612]);
+ // Turned −90°, the frame's own top left shows top right, so its origin sits the frame's height right of the bleed corner.
+ assert.deepEqual(plain(copy.relativeTransform),[[0,-1,8.5+842],[1,0,8.5]]);
+});
 test('a frame without bleed exports directly with zero bleed',async()=>{
  const {frame}=poster(),{figma,messages,log}=controller([frame]);
  await figma.ui.onmessage({type:'export',ids:['1']});assert.deepEqual([...messages.at(-1).bleeds],[0]);assert.equal(log.exported.length,0);
