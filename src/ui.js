@@ -24,14 +24,23 @@ function setToggle(id,on,label){const button=el(id);if(button.on!==on){button.in
 const frameBleed=frame=>frame.type==='FRAME'&&frame.bleed>0?Math.round(frame.bleed*25.4/72*100)/100:0;
 const formatLength=mm=>(unit==='in'?Math.round(mm/25.4*1000)/1000:mm)+' '+unit;
 const marksOn=()=>marksEnabled,pdfxOn=()=>el('pdfx').checked&&!!profile;
-function marksProblem(){return marksOn()?PrintCore.marksProblem(marks,Math.max(0,...frames.map(frameBleed))):'';}
+// A custom page size scales each frame to fit, so the bleed that reaches the PDF shrinks with it.
+const fitFor=frame=>autoSize||dimensions.width===null||dimensions.height===null||sizeProblem()?null:PrintCore.fit(PrintCore.frameSize(frame.width,frame.height),dimensions);
+const pdfBleed=frame=>{const fit=fitFor(frame);return Math.round(PrintCore.scaledBleed(frameBleed(frame),fit?fit.scale:1)*100)/100;};
+function marksProblem(){return marksOn()?PrintCore.marksProblem(marks,Math.max(0,...frames.map(pdfBleed))):'';}
+// Scaling down must leave enough bleed. The fix makes the canvas bleed big enough to survive the scale.
+function scaleProblem(){
+ let text='',needed=0;
+ for(const frame of frames){const fit=frameBleed(frame)?fitFor(frame):null,problem=fit&&PrintCore.scaledBleedProblem(frameBleed(frame),fit.scale);if(!problem)continue;text=text||problem;needed=Math.max(needed,Math.ceil(PrintCore.MIN_SCALED_BLEED/fit.scale*10)/10);}
+ return {text,needed};
+}
 function bleedProblem(){return Number.isFinite(bleedSetting)&&bleedSetting>0&&bleedSetting<=20?'':'Enter a bleed between 0 and 20 mm.';}
 function showLengths(){el('bleed').value=displayDimension(bleedSetting);el('mark-offset').value=displayDimension(marks.offset);el('mark-length').value=displayDimension(marks.length);el('mark-weight').value=marks.weight;for(const id of ['bleed','mark-offset','mark-length']){el(id).step=unit==='in'?'.01':'.5';}}
 // The finished sheet: trim plus the bleed, or plus the marks' offset and length.
 function sheetHint(){
- const valid=frames.filter(f=>f.type==='FRAME'),bleeds=[...new Set(valid.map(frameBleed))];
+ const valid=frames.filter(f=>f.type==='FRAME'),bleeds=[...new Set(valid.map(pdfBleed))];
  if(!valid.length||(!marksOn()&&bleeds.every(b=>!b)))return '';
- if(dimensions.width===null||dimensions.height===null||bleeds.length>1||marksProblem())return '';
+ if(dimensions.width===null||dimensions.height===null||bleeds.length>1||marksProblem()||scaleProblem().text)return '';
  const margin=PrintCore.margin(bleeds[0],marksOn()?marks:null),round=v=>Math.round(v*100)/100;
  return 'PDF page '+formatSize({width:round(dimensions.width+2*margin),height:round(dimensions.height+2*margin)})+(marksOn()?' with crop marks.':' with bleed.');
 }
@@ -57,7 +66,7 @@ li.append(nameNode(frame.name));if(!valid){size.textContent='Not a frame';li.app
 function sizeProblem(){if(autoSize)return '';if(dimensions.width===null||dimensions.height===null)return 'Enter a width and height.';try{PrintCore.points(dimensions.width);PrintCore.points(dimensions.height);return '';}catch(error){return error.message;}}
 function fieldInvalid(id){if(autoSize||dimensions[id]===null)return false;try{PrintCore.points(dimensions[id]);return false;}catch(error){return true;}}
 function profileProblem(){if(el('profile-mode').value==='none'||profile)return '';const entry=PROFILE_CATALOG.find(p=>p.id===el('profile-mode').value);return entry?'Import '+entry.name+' to export.':'Choose a CMYK profile to export.';}
-function refresh(){const invalid=frames.filter(f=>f.type!=='FRAME'),problem=sizeProblem(),count=frames.length-invalid.length,separate=el('export-mode').value==='separate';const marking=marksProblem();el('export').disabled=busy||!!downloadQueue||!!profileProblem()||!frames.length||invalid.length>0||!!problem||!!marking;el('export').textContent=busy?'Exporting…':count<2?'Export CMYK PDF':separate?'Export '+count+' CMYK PDFs':'Export '+count+'-page CMYK PDF';el('export-hint').textContent=busy?'':!frames.length?'':invalid.length?'Only frames can be exported. Deselect '+(invalid.length===1?'“'+invalid[0].name+'”':invalid.length+' layers')+'.':problem?'':marking?'Fix the crop mark settings to export.':profileProblem();
+function refresh(){const invalid=frames.filter(f=>f.type!=='FRAME'),problem=sizeProblem(),count=frames.length-invalid.length,separate=el('export-mode').value==='separate';const marking=marksProblem(),scaling=scaleProblem().text;el('export').disabled=busy||!!downloadQueue||!!profileProblem()||!frames.length||invalid.length>0||!!problem||!!marking||!!scaling;el('export').textContent=busy?'Exporting…':count<2?'Export CMYK PDF':separate?'Export '+count+' CMYK PDFs':'Export '+count+'-page CMYK PDF';el('export-hint').textContent=busy?'':!frames.length?'':invalid.length?'Only frames can be exported. Deselect '+(invalid.length===1?'“'+invalid[0].name+'”':invalid.length+' layers')+'.':problem?'':marking?'Fix the crop mark settings to export.':scaling?'Fix the bleed to export.':profileProblem();
  const widthInvalid=fieldInvalid('width'),heightInvalid=fieldInvalid('height');el('width-field').className='field'+(widthInvalid?' invalid':'');el('height-field').className='field'+(heightInvalid?' invalid':'');el('size-error').textContent=problem;el('size-error').className='hint'+(widthInvalid||heightInvalid?' error':'');el('size-snap').disabled=busy||!!downloadQueue;el('frame-count').textContent=!frames.length?'':invalid.length?frames.length+' selected':frames.length+(frames.length===1?' page':' pages');el('cancel').hidden=!busy;el('cancel').textContent='Cancel';el('profile').disabled=busy||!!downloadQueue;el('profile-mode').disabled=busy||!!downloadQueue;el('width').disabled=busy||!!downloadQueue;el('height').disabled=busy||!!downloadQueue;el('size-reset').disabled=busy||!!downloadQueue;el('units').disabled=busy||!!downloadQueue;el('export-options').hidden=count<2;el('export-mode').disabled=busy||!!downloadQueue;
  const locked=busy||!!downloadQueue,bleeds=frames.map(frameBleed).filter(b=>b),shown=[...new Set(bleeds)];
  // The header button is − once every selected frame has bleed, otherwise +. The amount shows once any frame has bleed, and editing it resizes that bleed.
@@ -67,11 +76,13 @@ function refresh(){const invalid=frames.filter(f=>f.type!=='FRAME'),problem=size
  el('bleed-field').className='field plain'+(bleedProblem()?' invalid':'');
  el('bleed-hint').textContent=!anyBleed?'':bleedProblem()||(shown.length>1?'Bleed varies between frames: '+shown.map(formatLength).join(', ')+'.':bleeds.length<count?bleeds.length+' of '+count+' frames '+(bleeds.length===1?'has':'have')+' bleed.':'');
  el('bleed-hint').className='hint'+(bleedProblem()?' error':'');
+ // Bleed that a smaller page size would shrink too far has one fix: more bleed on the canvas.
+ const scaled=scaleProblem();if(scaled.text&&!bleedProblem()){el('bleed-hint').className='hint error';el('bleed-hint').replaceChildren(document.createTextNode(scaled.text+' '));if(!locked){const fix=document.createElement('button');fix.className='link';fix.textContent='Use '+formatLength(scaled.needed)+' bleed';fix.onclick=()=>parent.postMessage({pluginMessage:{type:'show-bleed',ids:frames.filter(f=>frameBleed(f)).map(f=>f.id),bleed:scaled.needed*72/25.4}},'*');el('bleed-hint').append(fix);}}
  setToggle('marks-toggle',marksOn(),marksOn()?'Remove crop marks':'Add crop marks');el('marks-toggle').disabled=locked||(!count&&!marksOn());
  el('marks-options').hidden=!marksOn();el('marks-section').className=marksOn()?'':'collapsed';for(const id of ['mark-offset','mark-length','mark-weight'])el(id).disabled=locked;
  el('marks-error').textContent=marking;
  // An offset inside the bleed has one obvious fix, so offer it.
- const needed=Math.max(0,...frames.map(frameBleed));if(/at least the bleed/.test(marking)&&!locked){const fix=document.createElement('button');fix.className='link';fix.textContent='Use '+formatLength(needed);fix.onclick=()=>{marks.offset=needed;showLengths();clearResult();refresh();};el('marks-error').replaceChildren(document.createTextNode(marking+' '),fix);}el('mark-offset-field').className='field plain'+(/Offset/.test(marking)?' invalid':'');el('mark-length-field').className='field plain'+(/Length/.test(marking)?' invalid':'');el('mark-weight-field').className='field plain'+(/Thickness/.test(marking)?' invalid':'');
+ const needed=Math.max(0,...frames.map(pdfBleed));if(/at least the bleed/.test(marking)&&!locked){const fix=document.createElement('button');fix.className='link';fix.textContent='Use '+formatLength(needed);fix.onclick=()=>{marks.offset=needed;showLengths();clearResult();refresh();};el('marks-error').replaceChildren(document.createTextNode(marking+' '),fix);}el('mark-offset-field').className='field plain'+(/Offset/.test(marking)?' invalid':'');el('mark-length-field').className='field plain'+(/Length/.test(marking)?' invalid':'');el('mark-weight-field').className='field plain'+(/Thickness/.test(marking)?' invalid':'');
  // The page size sits under the last section that is on.
  el('sheet-hint').textContent=sheetHint();el('sheet-hint').hidden=!el('sheet-hint').textContent;if(!marksOn()&&anyBleed)el('bleed-section').append(el('sheet-hint'));else el('marks-section').append(el('sheet-hint'));
  // PDF/X needs an output intent, so it waits for a profile.
@@ -87,7 +98,10 @@ function updateSize(){
   el('width').placeholder=sizes.length?'Varies':'';el('height').placeholder=sizes.length?'Varies':'';
   el('size-hint').textContent=!sizes.length?'Select frames to calculate their print size.':same?'':'Each PDF page uses its own frame’s size. Enter dimensions to override all pages.';
   showPaperMatch(same?paperMatch(sizes[0]):null);
- }else{el('size-hint').textContent='Your size applies to every page. Artwork keeps its size, aligned top left; smaller pages crop it.';showPaperMatch(null);}
+ }else{
+  // Every page takes your size, and each frame scales to fit it, centred.
+  const scales=[...new Set(valid.map(f=>{const fit=fitFor(f);return fit?Math.round(fit.scale*100):null;}).filter(v=>v!==null))];
+  el('size-hint').textContent='Your size applies to every page. Artwork scales'+(scales.length===1&&scales[0]!==100?' to '+scales[0]+'%':'')+' to fit, centred.';showPaperMatch(null);}
  el('size-hint').hidden=!el('size-hint').textContent;el('size-reset').hidden=autoSize||!valid.length;
  refresh();
 }
@@ -120,7 +134,7 @@ el('bleed').onchange=()=>{if(busy||downloadQueue)return;if(allBleed()&&frames.so
 showLengths();
 for(const id of ['width','height'])el(id).oninput=()=>{dimensions[id]=el(id).value===''?null:Number(el(id).value)*(unit==='in'?25.4:1);autoSize=false;clearResult();updateSize();};
 el('profile').onchange=async event=>{const generation=++profileRead;const mode=el('profile-mode').value;try{const file=event.target.files[0];if(!file)return;profile=null;refresh();if(file.size>5*1024*1024)throw new Error('ICC profile is too large.');const bytes=new Uint8Array(await file.arrayBuffer());if(generation!==profileRead)return;PrintCore.validateICC(bytes);const name=PrintCore.profileDescription(bytes);const entry=PROFILE_CATALOG.find(p=>p.id===mode);if(entry && name!==entry.name)throw new Error('Choose '+entry.name+'. This file contains '+(name||'an unnamed profile')+'.');if(entry){const encoded=encodeProfile(bytes);profiles[mode]=encoded;parent.postMessage({pluginMessage:{type:'save-profile',id:mode,encoded}},'*');}else{customProfile=bytes;customName=name||file.name;}chooseProfile();}catch(error){if(generation!==profileRead)return;status(error.message,'error');}refresh();};
-el('export').onclick=()=>{try{const width=dimensions.width,height=dimensions.height;const auto=autoSize;const sizes=auto?frames.map(f=>PrintCore.frameSize(f.width,f.height)):null;if(sizes)for(const size of sizes){PrintCore.points(size.width);PrintCore.points(size.height);}else{PrintCore.points(width);PrintCore.points(height);}stopDownloadQueue();for(const url of downloadUrls)URL.revokeObjectURL(url);downloadUrls=[];job={individual:frames.length>1&&el('export-mode').value!=='combined',filenames:frames.map(f=>f.name+'.pdf'),filename:frames[0].name+'.pdf',width,height,auto,sizes,unit,displayWidth:el('width').value,displayHeight:el('height').value,icc:profile?profile.slice():null,name:profileName,marks:marksOn()?{...marks}:null,pureBlack:el('pure-black').checked,pdfx:pdfxOn()};busy=true;refresh();status('Preparing frames…','busy');parent.postMessage({pluginMessage:{type:'export',ids:frames.map(f=>f.id)}},'*');}catch(error){status(error.message,'error');}};
+el('export').onclick=()=>{try{const width=dimensions.width,height=dimensions.height;const auto=autoSize;const sizes=auto?frames.map(f=>PrintCore.frameSize(f.width,f.height)):null;if(sizes)for(const size of sizes){PrintCore.points(size.width);PrintCore.points(size.height);}else{PrintCore.points(width);PrintCore.points(height);}stopDownloadQueue();for(const url of downloadUrls)URL.revokeObjectURL(url);downloadUrls=[];job={individual:frames.length>1&&el('export-mode').value!=='combined',filenames:frames.map(f=>f.name+'.pdf'),filename:frames[0].name+'.pdf',width,height,auto,sizes,unit,displayWidth:el('width').value,displayHeight:el('height').value,icc:profile?profile.slice():null,name:profileName,marks:marksOn()?{...marks}:null,fits:auto?null:frames.map(fitFor),pureBlack:el('pure-black').checked,pdfx:pdfxOn()};busy=true;refresh();status('Preparing frames…','busy');parent.postMessage({pluginMessage:{type:'export',ids:frames.map(f=>f.id),prints:job.fits?job.fits.map(f=>f.scale):null}},'*');}catch(error){status(error.message,'error');}};
 el('cancel').onclick=()=>{parent.postMessage({pluginMessage:{type:'cancel'}},'*');stop();status('Export cancelled.');};
 window.onmessage=async event=>{
  const msg=event.data.pluginMessage;if(!msg)return;
@@ -136,7 +150,7 @@ window.onmessage=async event=>{
  if(msg.type==='error'){stop();if(Array.isArray(msg.issues)&&msg.issues.length){issues=msg.issues;renderFrames();const layers=new Set(issues.map(i=>i.nodeId)).size;status((layers===1?'1 layer uses':layers+' layers use')+' an unsupported effect, listed under its frame above. Remove the effect or flatten the layer, then export again.','error');}else status(msg.text,'error');}
  if(msg.type==='pdfs' && job){const current=job;try{current.bleeds=(msg.bleeds||[]).map(px=>px*25.4/72);if(current.auto && msg.sizes)current.sizes=msg.sizes.map(size=>PrintCore.frameSize(size.width,size.height));
   status('Combining pages…','busy');const merged=await PDFLib.PDFDocument.create();
-  for(let i=0;i<msg.pdfs.length;i++){const source=await PDFLib.PDFDocument.load(new Uint8Array(msg.pdfs[i])),scale=msg.scales&&msg.scales[i]||1;for(const page of await merged.copyPages(source,source.getPageIndices())){if(scale!==1)page.scale(1/scale,1/scale);merged.addPage(page);}}
+  for(let i=0;i<msg.pdfs.length;i++){const source=await PDFLib.PDFDocument.load(new Uint8Array(msg.pdfs[i])),scale=(msg.scales&&msg.scales[i]||1)/(current.fits?current.fits[i].scale:1);for(const page of await merged.copyPages(source,source.getPageIndices())){if(scale!==1)page.scale(1/scale,1/scale);merged.addPage(page);}}
   if(job!==current)return;status('Loading conversion engine…','busy');const downloadAbort=new AbortController();engineAbort=downloadAbort;refresh();const downloadTimer=setTimeout(()=>downloadAbort.abort(),60000);let wasm;try{wasm=await OpenPrintAssets.loadEngine(downloadAbort.signal,fraction=>{if(job===current)status('Downloading engine… '+Math.floor(fraction*100)+'%','busy');});}finally{clearTimeout(downloadTimer);}if(job!==current)return;engineAbort=null;
   const convert=bytes=>new Promise((resolve,reject)=>{
    const url=URL.createObjectURL(new Blob([WORKER_SOURCE],{type:'text/javascript'})),w=new Worker(url);URL.revokeObjectURL(url);worker=w;refresh();const engine=wasm.slice();
@@ -205,14 +219,14 @@ function showDownloads(outputs){
  a.click();return [a];
 }
 async function prepareDownloads(bytes,current){
- if(!current.individual)return [{filename:current.filename,bytes:await PrintCore.finish(bytes,current.icc,current.width,current.height,current.name,current.sizes,{bleeds:current.bleeds,marks:current.marks,pdfx:current.pdfx,title:current.filename.replace(/\.pdf$/,'')})}];
+ if(!current.individual)return [{filename:current.filename,bytes:await PrintCore.finish(bytes,current.icc,current.width,current.height,current.name,current.sizes,{bleeds:current.bleeds,fits:current.fits,marks:current.marks,pdfx:current.pdfx,title:current.filename.replace(/\.pdf$/,'')})}];
  const converted=await PDFLib.PDFDocument.load(bytes);
  if(converted.getPageCount()!==current.filenames.length)throw new Error('The exported page count does not match the selected frames. Please try again.');
  const outputs=[];
  for(let i=0;i<converted.getPageCount();i++){
   const single=await PDFLib.PDFDocument.create();const [page]=await single.copyPages(converted,[i]);single.addPage(page);
   const sizes=current.auto?[current.sizes[i]]:null;
-  outputs.push({filename:current.filenames[i],bytes:await PrintCore.finish(await single.save(),current.icc,current.width,current.height,current.name,sizes,{bleeds:current.bleeds?[current.bleeds[i]]:[],marks:current.marks,pdfx:current.pdfx,title:current.filenames[i].replace(/\.pdf$/,'')})});
+  outputs.push({filename:current.filenames[i],bytes:await PrintCore.finish(await single.save(),current.icc,current.width,current.height,current.name,sizes,{bleeds:current.bleeds?[current.bleeds[i]]:[],fits:current.fits?[current.fits[i]]:null,marks:current.marks,pdfx:current.pdfx,title:current.filenames[i].replace(/\.pdf$/,'')})});
  }
  return outputs;
 }

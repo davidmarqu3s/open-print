@@ -255,6 +255,13 @@ var PrintCore = {
   if(marks.offset+1e-6<bleed)return 'Offset must be at least the bleed ('+Math.round(bleed*100)/100+' mm).';
   return '';
  },
+ // How artwork of one size fits a page of another, in mm: scaled proportionally and centred.
+ fit(art,page) { const scale=Math.min(page.width/art.width,page.height/art.height);return {scale,dx:(page.width-art.width*scale)/2,dy:(page.height-art.height*scale)/2}; },
+ // Bleed that ends up in the PDF. Scaling down shrinks it; scaling up adds more than the BleedBox keeps.
+ scaledBleed(bleed,scale) { return bleed*Math.min(scale,1); },
+ // Printers usually ask for 3 mm, so scaling must not take the bleed below that.
+ MIN_SCALED_BLEED:3,
+ scaledBleedProblem(bleed,scale) { const left=this.scaledBleed(bleed,scale);return bleed>0&&scale<1&&left+0.005<this.MIN_SCALED_BLEED?'Scaling to '+Math.round(scale*100)+'% leaves '+Math.round(left*10)/10+' mm of bleed.':''; },
  // The margin around the trim on each side, in mm: the bleed, or the marks' offset plus length when there are marks.
  margin(bleed=0,marks=null) { return Math.max(bleed,marks?marks.offset+marks.length:0); },
  // Draws two marks per corner in a Separation All colour space, which prints on every plate (Registration).
@@ -308,11 +315,15 @@ var PrintCore = {
   if(pageSizes && pageSizes.length!==pages.length)throw new Error('Frame and PDF page counts do not match.');
   const sizes=pages.map((page,i)=>{const size=pageSizes?pageSizes[i]:{width,height};return {width:this.points(size.width),height:this.points(size.height)};});
   for(let i=0;i<pages.length;i++) {
-   const page=pages[i],w=sizes[i].width,h=sizes[i].height,bleedMm=options.bleeds&&options.bleeds[i]||0;
+   const page=pages[i],w=sizes[i].width,h=sizes[i].height,canvasBleed=options.bleeds&&options.bleeds[i]||0;
+   // Artwork for a page of another size arrives already scaled; fit says by how much and where it sits on the trim.
+   const fit=options.fits&&options.fits[i]||null,scale=fit?fit.scale:1,bleedMm=this.scaledBleed(canvasBleed,scale);
    const problem=this.marksProblem(marks,bleedMm);if(problem)throw new Error(problem);
-   const b=pt(bleedMm),m=pt(this.margin(bleedMm,marks)),old=page.getHeight();
-   // The exported page is trim plus bleed. Its top left goes to the bleed corner, so the trim lands on the TrimBox.
-   page.translateContent(m-b,h+2*m-(m-b)-old);
+   const b=pt(bleedMm),m=pt(this.margin(bleedMm,marks)),old=page.getHeight(),cb=pt(canvasBleed*scale),dx=fit?pt(fit.dx):0,dy=fit?pt(fit.dy):0;
+   // The exported page is the frame plus its bleed. Its top left goes to the bleed corner, so the trim lands on the TrimBox.
+   page.translateContent(m+dx-cb,h+m-dy+cb-old);
+   // Scaled artwork is clipped to its own trim plus the bleed, inside the BleedBox, so surplus bleed never shows in white space or under the marks.
+   if(fit){const aw=w-2*dx,ah=h-2*dy,x0=Math.max(m-b,m+dx-b),y0=Math.max(m-b,m+dy-b),x1=Math.min(m+w+b,m+dx+aw+b),y1=Math.min(m+h+b,m+dy+ah+b);page.node.wrapContentStreams(page.createContentStream(PDFLib.pushGraphicsState(),PDFLib.rectangle(x0,y0,x1-x0,y1-y0),PDFLib.clip(),PDFLib.endPath()),page.createContentStream(PDFLib.popGraphicsState()));}
    page.setMediaBox(0,0,w+2*m,h+2*m);page.setCropBox(0,0,w+2*m,h+2*m);page.setTrimBox(m,m,w,h);page.setBleedBox(m-b,m-b,w+2*b,h+2*b);
    if(marks)this.drawMarks(doc,page,{width:w,height:h},m,marks);
   }

@@ -96,3 +96,18 @@ test('crop marks are eight Registration lines outside the bleed, in their own st
 test('marks may not sit inside the bleed',()=>{
  const c=core();assert.match(c.marksProblem({offset:2,length:5,weight:0.25},3),/at least the bleed \(3 mm\)/);assert.equal(c.marksProblem({offset:3,length:5,weight:0.25},3),'');assert.match(c.marksProblem({offset:3,length:1,weight:0.25},0),/Length/);
 });
+test('a custom page size fits the artwork, centred, and clips it to its trim plus the scaled bleed',async()=>{
+ const P=core(),fit=P.fit({width:210,height:297},{width:105,height:200});assert.equal(fit.scale,0.5);assert(close(fit.dx,0));assert(close(fit.dy,25.75));
+ // The UI scales the merged page before finishing, as it does here.
+ const source=await PDFLib.PDFDocument.load(await exported(3));source.getPage(0).scale(0.5,0.5);
+ const result=await PDFLib.PDFDocument.load(await P.finish(await source.save(),null,null,null,'',[{width:105,height:200}],{bleeds:[3],fits:[fit]}));
+ const page=result.getPage(0),b=pt(1.5);
+ for(const [actual,expected] of [[box(page.getMediaBox()),[0,0,pt(105)+2*b,pt(200)+2*b]],[box(page.getTrimBox()),[b,b,pt(105),pt(200)]],[box(page.getBleedBox()),[0,0,pt(105)+2*b,pt(200)+2*b]]])
+  assert(actual.every((v,i)=>close(v,expected[i])),actual+' vs '+expected);
+ const first=Buffer.from(PDFLib.decodePDFRawStream(result.context.lookup(page.node.Contents().asArray()[0])).decode()).toString();
+ const [x,y,w,h]=first.match(/([\d.-]+) ([\d.-]+) ([\d.-]+) ([\d.-]+) re/).slice(1).map(Number);
+ assert(close(x,0));assert(Math.abs(y-pt(25.75))<1e-3);assert(Math.abs(w-pt(108))<1e-3);assert(Math.abs(h-pt(151.5))<1e-3);assert.match(first,/W\nn/);
+});
+test('scaling down blocks bleed that would end up under 3 mm',()=>{
+ const P=core();assert.equal(P.scaledBleedProblem(3,0.707),'Scaling to 71% leaves 2.1 mm of bleed.');assert.equal(P.scaledBleedProblem(4.3,0.707),'');assert.equal(P.scaledBleedProblem(3,1.41),'');assert.equal(P.scaledBleedProblem(0,0.5),'');assert.equal(P.scaledBleedProblem(2,0.7),'Scaling to 70% leaves 1.4 mm of bleed.');assert.equal(P.scaledBleedProblem(Math.ceil(3/0.7*10)/10,0.7),'');assert.equal(P.scaledBleed(3,1.41),3);
+});

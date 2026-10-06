@@ -74,3 +74,8 @@ test('noise images Figma has not finished preparing are waited for, and never ex
  t=rasterTree({placeholderExports:99});await t.figma.ui.onmessage({type:'export',ids:['1']});assert.equal(t.messages.at(-1).type,'error');assert.match(t.messages.at(-1).text,/didn’t finish preparing/);assert(t.log.copy.removed);
 });
 test('the window resizes vertically within limits and remembers its height',async()=>{const {figma}=controller([]);const sizes=[],stored={};figma.ui.resize=(w,h)=>sizes.push([w,h]);figma.clientStorage={getAsync:async k=>stored[k],setAsync:async(k,v)=>{stored[k]=v;}};await figma.ui.onmessage({type:'resize',height:700.4});await figma.ui.onmessage({type:'resize',height:50});await figma.ui.onmessage({type:'resize-end',height:9000});assert.deepEqual(sizes,[[320,700],[320,360],[320,1600]]);assert.equal(stored['open-print-height'],1600);});
+test('effects on a frame scaled up for a custom page size still render at 300 ppi at the printed size',async()=>{
+ const {frame,log}=effectFrame([{type:'DROP_SHADOW',visible:true}]);const {figma,messages}=effectController(frame,log);
+ await figma.ui.onmessage({type:'export',ids:['1'],prints:[2]});const msg=messages.at(-1);
+ assert(log.copy[0][1]*144>=600,'scale reaches 300 ppi at twice the size');assert.equal(msg.scales[0],log.copy[0][1]);assert(msg.effectPpi>=300&&msg.effectPpi<310);
+});

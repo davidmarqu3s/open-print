@@ -30,14 +30,15 @@ const multiply=(a,b)=>[0,1].map(r=>[a[r][0]*b[0][0]+a[r][1]*b[1][0],a[r][0]*b[0]
 function invert(m){const d=m[0][0]*m[1][1]-m[0][1]*m[1][0],a=m[1][1]/d,b=-m[0][1]/d,c=-m[1][0]/d,e=m[0][0]/d;return [[a,b,-(a*m[0][2]+b*m[1][2])],[c,e,-(c*m[0][2]+e*m[1][2])]];}
 // Covers the copied layer with a PNG of the original and hides the copy, keeping its place in any auto layout. Returns the image's ppi at print size.
 async function swapForImage(original,copy,topLevel,state) {
+ // state.print is how much the page is scaled for a custom page size, so the image reaches 300 ppi at the size it prints.
  const bounds=topLevel?original.absoluteBoundingBox:original.absoluteRenderBounds,target=topLevel?copy.absoluteBoundingBox:copy.absoluteRenderBounds;
  if(!bounds||!target||!bounds.width||!bounds.height)return Infinity;
- const k=Math.min(TARGET_PPI/72,MAX_IMAGE_EDGE/Math.max(bounds.width,bounds.height));
+ const k=Math.min(TARGET_PPI*state.print/72,MAX_IMAGE_EDGE/Math.max(bounds.width,bounds.height));
  const png=await original.exportAsync({format:'PNG',constraint:{type:'SCALE',value:k},useAbsoluteBounds:topLevel});
  // Until Figma has decoded a new image it paints the fill as one flat colour, so wait for it and check the PDF later.
  const created=figma.createImage(png),size=await created.getSizeAsync();state.images.push(size);
  const fill={type:'IMAGE',imageHash:created.hash,scaleMode:'FILL'};
- if(topLevel){for(const child of [...copy.children])child.remove();copy.effects=[];copy.strokes=[];copy.fills=[fill];return Math.round(72*k);}
+ if(topLevel){for(const child of [...copy.children])child.remove();copy.effects=[];copy.strokes=[];copy.fills=[fill];return Math.round(72*k/state.print);}
  const image=figma.createRectangle(),parent=copy.parent;
  parent.insertChild(parent.children.indexOf(copy)+1,image);
  if(parent.layoutMode&&parent.layoutMode!=='NONE')image.layoutPositioning='ABSOLUTE';
@@ -47,7 +48,7 @@ async function swapForImage(original,copy,topLevel,state) {
  image.fills=[fill];image.blendMode=copy.blendMode;
  // Clearing the effects stops Figma baking a bitmap of the hidden layer.
  copy.opacity=0;copy.effects=[];
- return Math.round(72*k);
+ return Math.round(72*k/state.print);
 }
 // Whether Figma's PDF embeds an image of each expected size. Figma writes image dictionaries uncompressed.
 const RETRIES=10,RETRY_MS=300;
@@ -69,11 +70,12 @@ async function rasterise(original,copy,state,topLevel=false) {
  return ppi;
 }
 // Returns the PDF and the factor its page must be scaled down by. The copy never touches the original.
+// print is how much a custom page size scales the frame; effects are rendered for that size.
 // A frame with bleed is exported from a copy inside a clipping frame of trim plus bleed, without the bleed layer's guide outline.
-async function exportFrame(node,found,bleed=0) {
+async function exportFrame(node,found,bleed=0,print=1) {
  if(!found.effects&&!bleed)return {pdf:await node.exportAsync({format:'PDF'}),scale:1};
  const width=node.width+2*bleed,height=node.height+2*bleed;
- const scale=found.effects?Math.min(TARGET_PPI/EFFECT_PPI+0.02,MAX_EFFECT_EDGE/(2*Math.max(width,height))):1;
+ const scale=found.effects?Math.min((TARGET_PPI/EFFECT_PPI+0.02)*print,MAX_EFFECT_EDGE/(2*Math.max(width,height))):1;
  let copy=null,wrapper=null,copied=false;
  try{
   copy=node.clone();
@@ -82,7 +84,7 @@ async function exportFrame(node,found,bleed=0) {
    wrapper.appendChild(copy);copy.x=bleed;copy.y=bleed;const guide=bleedLayer(copy);if(guide)guide.strokes=[];
   }else figma.currentPage.appendChild(copy);
   const target=wrapper||copy;if(scale!==1)target.rescale(scale);copied=true;
-  const state={images:[]},ppi=found.effects?Math.min(Math.round(EFFECT_PPI*scale),found.raster?await rasterise(node,copy,state,true):Infinity):null;
+  const state={images:[],print},ppi=found.effects?Math.min(Math.round(EFFECT_PPI*scale/print),found.raster?await rasterise(node,copy,state,true):Infinity):null;
   let pdf=await target.exportAsync({format:'PDF'});
   for(let attempt=0;!hasImages(pdf,state.images);attempt++){if(attempt===RETRIES)throw new Error('Figma didn’t finish preparing the image. Try exporting again.');await new Promise(resolve=>setTimeout(resolve,RETRY_MS));pdf=await target.exportAsync({format:'PDF'});}
   return {pdf,scale,ppi};
@@ -90,7 +92,7 @@ async function exportFrame(node,found,bleed=0) {
  catch(error){
   if(found.raster)throw new Error('Couldn’t render the noise or texture in '+node.name+(copied?': '+(error.message||error):'. Figma needs to make a temporary copy of the frame, so check you can edit this file.'));
   if(bleed)throw new Error('Couldn’t add the bleed to '+node.name+(copied?': '+(error.message||error):'. Figma needs to make a temporary copy of the frame, so check you can edit this file.'));
-  return {pdf:await node.exportAsync({format:'PDF'}),scale:1,ppi:EFFECT_PPI};
+  return {pdf:await node.exportAsync({format:'PDF'}),scale:1,ppi:Math.round(EFFECT_PPI/print)};
  }
  finally{if(wrapper&&!wrapper.removed)wrapper.remove();else if(copy&&!copy.removed)copy.remove();}
 }
@@ -113,7 +115,7 @@ function hideBleed(frame) {
  frame.fills=layer.fills;layer.remove();
  frame.clipsContent=frame.getPluginData(BLEED_KEY+'-clip')!=='false';frame.setPluginData(BLEED_KEY+'-clip','');
 }
-async function runExport(ids,id) {
+async function runExport(ids,id,prints) {
  const current=()=>id===exportId;
  try {
   if(!Array.isArray(ids)||!ids.length||ids.length>32)throw new Error('Select 1–32 frames.');
@@ -122,7 +124,7 @@ async function runExport(ids,id) {
   const issues=[],effects=nodes.map(n=>inspect(n,issues,n));
   if(issues.length){if(current())figma.ui.postMessage({type:'error',text:issues.slice(0,5).map(i=>i.text).join('\n'),issues});return;}
   const pdfs=[],sizes=[],bleeds=[],scales=[],ppi=[];
-  for(let i=0;i<nodes.length;i++){if(!current())return;figma.ui.postMessage({type:'status',text:'Exporting frame '+(i+1)+' of '+nodes.length+'…'});sizes.push({width:nodes[i].width,height:nodes[i].height});bleeds.push(bleedOf(nodes[i]));const result=await exportFrame(nodes[i],effects[i],bleeds[i]);pdfs.push(result.pdf);scales.push(result.scale);if(result.ppi)ppi.push(result.ppi);}
+  for(let i=0;i<nodes.length;i++){if(!current())return;figma.ui.postMessage({type:'status',text:'Exporting frame '+(i+1)+' of '+nodes.length+'…'});sizes.push({width:nodes[i].width,height:nodes[i].height});bleeds.push(bleedOf(nodes[i]));const print=Array.isArray(prints)&&prints[i]>0&&prints[i]<=100?prints[i]:1;const result=await exportFrame(nodes[i],effects[i],bleeds[i],print);pdfs.push(result.pdf);scales.push(result.scale);if(result.ppi)ppi.push(result.ppi);}
   if(current())figma.ui.postMessage({type:'pdfs',pdfs,sizes,bleeds,scales,effectPpi:ppi.length?Math.min(...ppi):null});
  }catch(error){if(current())figma.ui.postMessage({type:'error',text:error.message||String(error)});}
 }
@@ -144,5 +146,5 @@ figma.ui.onmessage=async msg=>{
  }
  if(msg.type!=='export')return;
  // Exports run one at a time. Cancel bumps exportId so a running export stops posting, and a new one waits its turn.
- const id=++exportId;exportRun=exportRun.then(()=>runExport(msg.ids,id));await exportRun;
+ const id=++exportId;exportRun=exportRun.then(()=>runExport(msg.ids,id,msg.prints));await exportRun;
 };
