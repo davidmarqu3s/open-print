@@ -269,7 +269,8 @@ function showDownloads(outputs){
  a.href=url;a.download=output.filename;a.textContent='Save PDF';links.append(a);downloadUrls.push(url);
  const again=document.createElement('button');again.className='link again';again.textContent='Save again';again.onclick=()=>a.click();
  const message=document.createElement('span');message.textContent=output.filename+' is ready.';
- el('status').replaceChildren(message,links,again);el('status').className='done';
+ const line=document.createElement('div');line.className='line';line.append(message,again);
+ el('status').replaceChildren(line,links);el('status').className='done';
  a.click();return [a];
 }
 async function prepareDownloads(bytes,current){

@@ -15,9 +15,10 @@ h2{margin:0;font-size:11px;font-weight:550}
 .hint{margin:8px 0 0;color:var(--text2)}
 .hint:empty,[hidden]{display:none!important}
 .hint.error{color:var(--danger)}
-/* Messages always stack: the text on its own line, any action link below it. */
-.hint .link{display:block;margin-top:4px}
-.match{display:flex;flex-direction:column;align-items:flex-start;gap:4px;margin-top:8px;color:var(--text2)}
+/* A short message keeps its action link beside it; the link drops below only when both don't fit on one line. */
+.hint:has(.link),.match,#status .line{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 8px}
+.hint .link,.match .link{flex:none;white-space:nowrap}
+.match{margin-top:8px;color:var(--text2)}
 /* 6.5 rows: a cut-off row signals that the list scrolls. */
 ol{list-style:none;margin:0 -8px;padding:0;max-height:208px;overflow-y:auto}
 li{display:flex;align-items:center;gap:8px;height:32px;padding:0 8px;border-radius:5px}
@@ -118,7 +119,7 @@ li.issue.warning,li.issue.warning .name{color:var(--warning)}
 #status .step{margin-left:auto;flex:none;color:var(--text2);font-variant-numeric:tabular-nums}
 #status.done{display:grid;grid-template-columns:12px minmax(0,1fr);gap:4px 6px}
 #status.done>*{grid-column:2}
-#status .again{justify-self:start}
+#status .again{flex:none;white-space:nowrap}
 #status .note{flex-basis:100%;color:var(--warning)}
 #status.busy::before{content:"";flex:none;width:12px;height:12px;margin-top:2px;border:1.5px solid var(--border);border-top-color:var(--brand);border-radius:50%;animation:spin .8s linear infinite}
 #status a{margin-left:auto;color:var(--figma-color-text-brand,#007be5);font-weight:550;text-decoration:none}

@@ -150,7 +150,7 @@ test('progress messages show their step and cancel stays available for the whole
 test('a finished PDF names its file and can be saved again',()=>{
  const h=ui(),output=sampleDownloads()[0];h.context.showDownloads([output]);
  assert.match(h.el('status').textContent,/Álvaro name tag\.pdf is ready/);assert.equal(h.el('status').className,'done');
- h.el('status').children[2].onclick();assert.equal(h.clicks.length,2);assert.equal(h.clicks[1].filename,output.filename);
+ h.el('status').children[0].children[1].onclick();assert.equal(h.clicks.length,2);assert.equal(h.clicks[1].filename,output.filename);
 });
 test('show bleed sends the bleed in frame units for the selected frames',async()=>{const {window,el,messages}=ui();await window.onmessage({data:{pluginMessage:{type:'selection',frames:[frame('1',595,842)]}}});assert.equal(el('bleed').value,3);assert.equal(el('bleed-toggle').title,'Add bleed');assert.equal(el('bleed-toggle').disabled,false);el('bleed-toggle').onclick();const msg=messages.at(-1);assert.equal(msg.type,'show-bleed');assert.deepEqual([...msg.ids],['1']);assert(Math.abs(msg.bleed-3*72/25.4)<1e-9);});
 test('frames with bleed list only their name, offer Remove bleed and give the sheet size',async()=>{const {window,el}=ui();await window.onmessage({data:{pluginMessage:{type:'selection',frames:[{...frame('1',595.28,841.89),bleed:3*72/25.4}]}}});assert.equal(el('frames').children[0].textContent,'Sheet 1');assert.equal(el('bleed').value,3);assert.equal(el('bleed-toggle').title,'Remove bleed');assert.equal(el('bleed-toggle').disabled,false);assert.match(el('sheet-hint').textContent,/PDF page 216 × 303 mm with bleed/);el('marks-toggle').onclick();assert.match(el('sheet-hint').textContent,/226 × 313 mm with crop marks/);});
