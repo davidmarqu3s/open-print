@@ -1,6 +1,6 @@
-// New frame menu items create a paper-size frame at 72 units per inch, the scale the export uses, and close without opening the panel.
+figma.showUI(__html__, {width:320,height:560,themeColors:true});
+// New frame creates a paper-size frame at 72 units per inch, the scale the export uses, in the middle of the view.
 const PAPER_FRAMES={A0:[841,1189],A1:[594,841],A2:[420,594],A3:[297,420],A4:[210,297],A5:[148,210],A6:[105,148]};
-const paperFrame=typeof figma.command==='string'&&figma.command.startsWith('frame-')?figma.command.slice(6):null;
 function newPaperFrame(name) {
  const mm=PAPER_FRAMES[name];if(!mm)return;
  const [width,height]=mm.map(v=>Math.round(v*72/25.4*100)/100),view=figma.viewport.bounds,frame=figma.createFrame();
@@ -8,11 +8,9 @@ function newPaperFrame(name) {
  figma.currentPage.selection=[frame];
  if(width>view.width||height>view.height)figma.viewport.scrollAndZoomIntoView([frame]);
 }
-if(paperFrame){newPaperFrame(paperFrame);figma.closePlugin();}
-else figma.showUI(__html__, {width:320,height:560,themeColors:true});
 // The window is resizable vertically. Its height is clamped and remembered between sessions.
 const UI_WIDTH=320,uiHeight=h=>Math.min(1600,Math.max(360,Math.round(Number(h)||560)));
-if(!paperFrame)(async()=>{try{const h=await figma.clientStorage.getAsync('open-print-height');if(h)figma.ui.resize(UI_WIDTH,uiHeight(h));}catch(error){/* Keep the default height. */}})();
+(async()=>{try{const h=await figma.clientStorage.getAsync('open-print-height');if(h)figma.ui.resize(UI_WIDTH,uiHeight(h));}catch(error){/* Keep the default height. */}})();
 let exportRun=Promise.resolve(),exportId=0,profileSave=Promise.resolve();
 // Show bleed adds this layer at the bottom of a frame. It holds the frame's background, sized to trim plus bleed, and its plugin data records the bleed in frame units.
 const BLEED_KEY='open-print-bleed',BLEED_GUIDE={type:'SOLID',color:{r:1,g:0.2,b:0.2}};
@@ -42,7 +40,7 @@ async function describe(n) {
 // Selection changes can overlap while main components load, so only the latest one is posted.
 let selectionId=0;
 async function selection() { const id=++selectionId,frames=await Promise.all(figma.currentPage.selection.map(describe));if(id===selectionId)figma.ui.postMessage({type:'selection',frames}); }
-if(!paperFrame)figma.on('selectionchange',selection);
+figma.on('selectionchange',selection);
 // Figma rasterises these effects at 144 ppi in PDF exports. Other effect types are untested.
 const EFFECTS=['DROP_SHADOW','INNER_SHADOW','LAYER_BLUR','BACKGROUND_BLUR'];
 // Figma's PDF export can't draw these, so layers that use them are swapped for a 300 ppi PNG of the layer in the scaled copy.
@@ -162,7 +160,7 @@ async function runExport(ids,id,prints) {
   if(current())figma.ui.postMessage({type:'pdfs',pdfs,sizes,bleeds,scales,effectPpi:ppi.length?Math.min(...ppi):null});
  }catch(error){if(current())figma.ui.postMessage({type:'error',text:error.message||String(error)});}
 }
-if(!paperFrame)figma.ui.onmessage=async msg=>{
+figma.ui.onmessage=async msg=>{
  if(msg.type==='load-profiles'){try{figma.ui.postMessage({type:'profiles',profiles:await figma.clientStorage.getAsync('open-print-profiles')||{}});}catch(error){figma.ui.postMessage({type:'profiles',profiles:{}});}return;}
  if(msg.type==='save-profile'){try{if(typeof msg.id!=='string'||msg.id.length>100||typeof msg.encoded!=='string'||msg.encoded.length>7*1024*1024)throw new Error('Invalid profile');profileSave=profileSave.catch(()=>{}).then(async()=>{const profiles=await figma.clientStorage.getAsync('open-print-profiles')||{};profiles[msg.id]=msg.encoded;await figma.clientStorage.setAsync('open-print-profiles',profiles);});await profileSave;}catch(error){figma.ui.postMessage({type:'profile-storage-error'});}return;}
  if(msg.type==='resize'||msg.type==='resize-end'){const h=uiHeight(msg.height);figma.ui.resize(UI_WIDTH,h);if(msg.type==='resize-end')try{await figma.clientStorage.setAsync('open-print-height',h);}catch(error){/* The height is kept for this session only. */}return;}
@@ -170,6 +168,7 @@ if(!paperFrame)figma.ui.onmessage=async msg=>{
  if(msg.type==='show-layer'){try{const node=await figma.getNodeByIdAsync(String(msg.id));if(node&&node.type!=='PAGE'&&node.type!=='DOCUMENT')figma.viewport.scrollAndZoomIntoView([node]);}catch(error){/* The layer was deleted. */}return;}
  // Selects a layer that may be on another page, such as an instance's main component.
  if(msg.type==='select-layer'){try{const node=await figma.getNodeByIdAsync(String(msg.id));let page=node;while(page&&page.type!=='PAGE')page=page.parent;if(!node||!page)return;if(page!==figma.currentPage)await figma.setCurrentPageAsync(page);figma.currentPage.selection=[node];figma.viewport.scrollAndZoomIntoView([node]);}catch(error){/* The layer was deleted. */}return;}
+ if(msg.type==='new-frame'){newPaperFrame(String(msg.size));return;}
  if(msg.type==='cancel'){exportId++;return;}
  if(msg.type==='show-bleed'||msg.type==='hide-bleed'){
   try{

@@ -11,6 +11,7 @@ section+section{border-top:1px solid var(--border)}
 /* Figma UI3 type: 11/16 Inter, 450 for body text and 550 for titles and buttons. */
 h2{margin:0;font-size:11px;font-weight:550}
 .meta{color:var(--text2)}
+.head-end{display:flex;align-items:center;gap:4px}
 .hint{margin:8px 0 0;color:var(--text2)}
 .hint:empty,[hidden]{display:none!important}
 .hint.error{color:var(--danger)}
@@ -117,11 +118,11 @@ footer{flex:none;border-top:1px solid var(--border)}
 @keyframes spin{to{transform:rotate(360deg)}}
 </style></head><body>
 <main>
-<section><div class="head"><h2>Frames</h2><span class="meta" id="frame-count"></span></div><ol id="frames"><li class="empty">Select frames or components on the canvas.</li></ol></section>
+<section><div class="head"><h2>Frames</h2><div class="head-end"><span class="meta" id="frame-count"></span><select id="new-frame" class="add" aria-label="New frame"><option value="" hidden>New frame</option><optgroup label="New frame"><option value="A0">A0 (841 × 1189 mm)</option><option value="A1">A1 (594 × 841 mm)</option><option value="A2">A2 (420 × 594 mm)</option><option value="A3">A3 (297 × 420 mm)</option><option value="A4">A4 (210 × 297 mm)</option><option value="A5">A5 (148 × 210 mm)</option><option value="A6">A6 (105 × 148 mm)</option></optgroup></select></div></div><ol id="frames"><li class="empty">Select frames or components on the canvas.</li></ol></section>
 <section><div class="head"><h2>Page size</h2><select id="units" class="compact" aria-label="Units"><option value="mm">mm</option><option value="in">in</option></select></div>
 <div class="dims"><label class="field" id="width-field" title="Width"><span class="prefix" aria-hidden="true">W</span><input id="width" type="number" min="10" max="2000" step=".01" aria-label="Width"><span class="suffix" id="width-unit">mm</span></label><label class="field" id="height-field" title="Height"><span class="prefix" aria-hidden="true">H</span><input id="height" type="number" min="10" max="2000" step=".01" aria-label="Height"><span class="suffix" id="height-unit">mm</span></label></div>
 <p class="hint error" id="size-error"></p>
-<p class="hint" id="size-hint">Select frames or components to calculate their print size.</p>
+<p class="hint" id="size-hint"></p>
 <button id="size-reset" class="link reset" hidden>Reset to frame size</button>
 <div class="match" id="size-match" hidden><span id="size-match-text"></span><button id="size-snap" class="link"></button></div></section>
 <section id="bleed-section" class="collapsed"><div class="head toggle" id="bleed-head"><h2>Bleed</h2><button id="bleed-toggle" class="icon"></button></div>

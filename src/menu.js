@@ -3,6 +3,7 @@
 // The hidden <select> stays the source of truth: ui.js keeps reading and writing value, disabled and onchange.
 (()=>{
 const CHECK='<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.25" aria-hidden="true"><path d="M4.5 8.25 6.75 10.5 11.5 5.5"/></svg>';
+const PLUS='<svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M11.5 7h1v4.5H17v1h-4.5V17h-1v-4.5H7v-1h4.5z"/></svg>';
 const CHEVRON='<svg width="8" height="5" viewBox="0 0 8 5" fill="none" stroke="currentColor" stroke-width="1.2" aria-hidden="true"><path d="M.5.5 4 4 7.5.5"/></svg>';
 let open=null,ids=0;
 function close(focus=false){if(!open)return;const {trigger,menu}=open;open=null;menu.remove();trigger.setAttribute('aria-expanded','false');trigger.removeAttribute('aria-activedescendant');if(focus)trigger.focus();}
@@ -10,7 +11,8 @@ function enhance(select){
  const trigger=document.createElement('button'),label=document.createElement('span');
  trigger.type='button';trigger.className='select'+(select.classList.contains('compact')?' compact':'');trigger.setAttribute('aria-haspopup','listbox');trigger.setAttribute('aria-expanded','false');
  if(select.getAttribute('aria-label'))trigger.setAttribute('aria-label',select.getAttribute('aria-label'));
- label.className='select-label';trigger.append(label);trigger.insertAdjacentHTML('beforeend',CHEVRON);
+ // A select with class "add" is an action menu behind a + button, and its hidden first option keeps it showing no choice.
+ if(select.classList.contains('add')){trigger.className='icon';trigger.title=select.getAttribute('aria-label')||'';trigger.innerHTML=PLUS;}else{label.className='select-label';trigger.append(label);trigger.insertAdjacentHTML('beforeend',CHEVRON);}
  select.classList.add('native');select.tabIndex=-1;select.setAttribute('aria-hidden','true');select.after(trigger);
  const sync=()=>{const option=select.options[select.selectedIndex];label.textContent=option?option.textContent:'';trigger.disabled=select.disabled;if(select.disabled&&open&&open.select===select)close();};
  // ui.js sets value and disabled directly, which fires no events, so mirror them on the instance.
@@ -23,8 +25,8 @@ function enhance(select){
   if(select.getAttribute('aria-label'))menu.setAttribute('aria-label',select.getAttribute('aria-label'));
   const add=(option,group)=>{const item=document.createElement('div'),text=document.createElement('span');item.className='menu-item';item.id=menu.id+'-'+items.length;item.setAttribute('role','option');item.setAttribute('aria-selected',String(option.selected));item.insertAdjacentHTML('afterbegin',option.selected?CHECK:'<span class="menu-check"></span>');text.textContent=option.textContent;item.append(text);item.onmousemove=()=>activate(items.indexOf(item));item.onclick=()=>choose(option.value);(group||menu).append(item);items.push(item);};
   for(const child of select.children){
-   if(child.tagName==='OPTGROUP'){const group=document.createElement('div'),title=document.createElement('div');group.setAttribute('role','group');title.className='menu-title';title.textContent=child.label;group.setAttribute('aria-label',child.label);if(menu.children.length)menu.append(Object.assign(document.createElement('div'),{className:'menu-divider'}));group.append(title);menu.append(group);for(const option of child.children)add(option,group);}
-   else add(child);
+   if(child.tagName==='OPTGROUP'){const group=document.createElement('div'),title=document.createElement('div');group.setAttribute('role','group');title.className='menu-title';title.textContent=child.label;group.setAttribute('aria-label',child.label);if(menu.children.length)menu.append(Object.assign(document.createElement('div'),{className:'menu-divider'}));group.append(title);menu.append(group);for(const option of child.children)if(!option.hidden)add(option,group);}
+   else if(!child.hidden)add(child);
   }
   const activate=index=>{items.forEach((item,i)=>item.classList.toggle('active',i===index));open.active=index;if(index>=0){trigger.setAttribute('aria-activedescendant',items[index].id);items[index].scrollIntoView({block:'nearest'});}};
   document.body.append(menu);open={select,trigger,menu,items,active:-1,activate,choose};trigger.setAttribute('aria-expanded','true');trigger.setAttribute('aria-controls',menu.id);
