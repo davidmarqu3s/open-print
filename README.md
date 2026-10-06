@@ -12,7 +12,7 @@ Open Print is an open-source Figma plugin that exports selected frames as vector
 ## Export a PDF
 
 1. Select up to 32 frames and run **Plugins → Development → Open Print**.
-2. Keep **Use frame size** on, or enter a width and height. The **mm**/**in** menu next to **Page size** switches units.
+2. The page size follows the frame. To use another size, enter a width and height; **Reset to frame size** brings the frame size back. The **mm**/**in** menu next to **Page size** switches units.
 3. With several frames, choose **One multipage PDF** or **Individual PDFs** under **Export as**. Individual PDFs open one Save dialog per frame.
 4. Under **Color profile**, choose your printer’s CMYK profile, **No profile** or **Custom CMYK profile…**, then click **Export CMYK PDF**.
 
