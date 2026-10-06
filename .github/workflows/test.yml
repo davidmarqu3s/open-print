@@ -16,6 +16,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+      # The render tests draw finished PDFs with poppler's pdftoppm, as a viewer would.
+      - run: sudo apt-get update && sudo apt-get install -y poppler-utils
       # The build fails if the plugin exceeds Figma's 15 MB publishing limit.
       - run: npm run build
       # Tests read dist/, so they run after the build.
