@@ -22,7 +22,7 @@ function poster(){
  const photo=node({type:'RECTANGLE',name:'Photo'}),frame=node({id:'1',type:'FRAME',name:'Poster',width:595,height:842,fills:[RED],children:[]});
  frame.appendChild(photo);
  frame.exportAsync=async()=>new Uint8Array([1]);
- frame.clone=()=>{const copy=node({type:'FRAME',width:frame.width,height:frame.height,fills:frame.fills,clipsContent:frame.clipsContent});for(const child of frame.children){const c=node({...child,children:[],strokes:[...child.strokes]});for(const key of ['open-print-bleed'])if(child.getPluginData(key))c.setPluginData(key,child.getPluginData(key));copy.appendChild(c);}return copy;};
+ frame.clone=()=>{const copy=node({type:'FRAME',width:frame.width,height:frame.height,fills:frame.fills,clipsContent:frame.clipsContent});for(const child of frame.children){const c=node({...child,children:[],strokes:[...child.strokes]});for(const key of ['open-print-bleed','open-print-trim'])if(child.getPluginData(key))c.setPluginData(key,child.getPluginData(key));copy.appendChild(c);}return copy;};
  return {frame,photo};
 }
 test('show bleed moves the background onto a locked layer around the frame and turns clipping off',async()=>{
@@ -35,16 +35,29 @@ test('show bleed moves the background onto a locked layer around the frame and t
  assert.deepEqual(plain(layer.dashPattern),[4,4]);assert.equal(layer.strokes.length,1);
  assert.deepEqual(plain(layer.constraints),{horizontal:'STRETCH',vertical:'STRETCH'});
  assert.equal(messages.at(-1).type,'selection');assert.equal(messages.at(-1).frames[0].bleed,8.5);
- // A second Show bleed resizes the same layer.
+ // A second Show bleed resizes the same layer and keeps one trim outline.
  await figma.ui.onmessage({type:'show-bleed',ids:['1'],bleed:14.17});
- assert.equal(frame.children.filter(c=>c.name==='Bleed').length,1);assert.equal(frame.children[0].x,-14.17);assert.deepEqual(plain(frame.children[0].fills),[RED]);
+ assert.equal(frame.children.filter(c=>c.name==='Bleed').length,1);assert.equal(frame.children.filter(c=>c.name==='Trim').length,1);assert.equal(frame.children[0].x,-14.17);assert.deepEqual(plain(frame.children[0].fills),[RED]);
+});
+test('show bleed outlines the original frame edge with a locked, unfilled layer on top',async()=>{
+ const {frame}=poster(),{figma}=controller([frame]);
+ await figma.ui.onmessage({type:'show-bleed',ids:['1'],bleed:8.5});
+ const trim=frame.children.at(-1);
+ assert.equal(trim.name,'Trim');assert.deepEqual([trim.x,trim.y,trim.width,trim.height],[0,0,595,842]);
+ assert.deepEqual(plain(trim.fills),[]);assert.equal(trim.strokes.length,1);assert.equal(trim.dashPattern,undefined);assert.equal(trim.locked,true);
+ assert.deepEqual(plain(trim.constraints),{horizontal:'STRETCH',vertical:'STRETCH'});
+});
+test('a frame given bleed before the trim outline existed gets one when bleed is set again',async()=>{
+ const {frame}=poster(),{figma}=controller([frame]);
+ await figma.ui.onmessage({type:'show-bleed',ids:['1'],bleed:8.5});frame.children.at(-1).remove();
+ await figma.ui.onmessage({type:'show-bleed',ids:['1'],bleed:8.5});assert.equal(frame.children.at(-1).name,'Trim');
 });
 test('hide bleed puts the background back, removes the layer and restores clipping',async()=>{
  const {frame}=poster(),{figma,messages}=controller([frame]);
  await figma.ui.onmessage({type:'show-bleed',ids:['1'],bleed:8.5});
  const BLUE={type:'SOLID',color:{r:0,g:0,b:1}};frame.children[0].fills=[BLUE];
  await figma.ui.onmessage({type:'hide-bleed',ids:['1']});
- assert.deepEqual(plain(frame.fills),[BLUE]);assert.equal(frame.children.length,1);assert.equal(frame.clipsContent,true);assert.equal(messages.at(-1).frames[0].bleed,0);
+ assert.deepEqual(plain(frame.fills),[BLUE]);assert.equal(frame.children.length,1);assert.equal(frame.children[0].name,'Photo');assert.equal(frame.clipsContent,true);assert.equal(messages.at(-1).frames[0].bleed,0);
 });
 test('a frame that did not clip keeps not clipping after hide bleed',async()=>{
  const {frame}=poster();frame.clipsContent=false;const {figma}=controller([frame]);
@@ -53,18 +66,18 @@ test('a frame that did not clip keeps not clipping after hide bleed',async()=>{
 });
 test('in auto layout the bleed layer is absolutely positioned',async()=>{
  const {frame}=poster();frame.layoutMode='VERTICAL';const {figma}=controller([frame]);
- await figma.ui.onmessage({type:'show-bleed',ids:['1'],bleed:8.5});assert.equal(frame.children[0].layoutPositioning,'ABSOLUTE');
+ await figma.ui.onmessage({type:'show-bleed',ids:['1'],bleed:8.5});assert.equal(frame.children[0].layoutPositioning,'ABSOLUTE');assert.equal(frame.children.at(-1).layoutPositioning,'ABSOLUTE');
 });
-test('a frame with bleed exports from a clipping wrapper of trim plus bleed, without the guide outline, and reports its bleed',async()=>{
+test('a frame with bleed exports from a clipping wrapper of trim plus bleed, without the guide or trim outlines, and reports its bleed',async()=>{
  const {frame}=poster(),{figma,messages,log,page}=controller([frame]);
  await figma.ui.onmessage({type:'show-bleed',ids:['1'],bleed:8.5});
  await figma.ui.onmessage({type:'export',ids:['1']});
  const msg=messages.at(-1);assert.equal(msg.type,'pdfs',msg.text);assert.deepEqual([...msg.bleeds],[8.5]);
  const wrapper=log.exported[0];assert.deepEqual([wrapper.width,wrapper.height],[612,859]);assert.equal(wrapper.clipsContent,true);assert.deepEqual(plain(wrapper.fills),[]);
- const copy=wrapper.children[0];assert.deepEqual([copy.x,copy.y],[8.5,8.5]);assert.deepEqual(plain(copy.children[0].strokes),[]);
+ const copy=wrapper.children[0];assert.deepEqual([copy.x,copy.y],[8.5,8.5]);assert.deepEqual(plain(copy.children[0].strokes),[]);assert.equal(copy.children.at(-1).visible,false);
  assert.equal(wrapper.removed,true);assert.equal(page.children.length,1);
- // The original keeps its guide.
- assert.equal(frame.children[0].strokes.length,1);
+ // The original keeps its guide and trim outline.
+ assert.equal(frame.children[0].strokes.length,1);assert.notEqual(frame.children.at(-1).visible,false);
 });
 test('a frame without bleed exports directly with zero bleed',async()=>{
  const {frame}=poster(),{figma,messages,log}=controller([frame]);
@@ -91,6 +104,7 @@ test('a component takes bleed like a frame, and its instances show and export it
  await figma.ui.onmessage({type:'export',ids:['2']});
  const msg=messages.at(-1);assert.equal(msg.type,'pdfs',msg.text);assert.deepEqual([...msg.bleeds],[8.5]);
  const wrapper=log.exported[0];assert.deepEqual([wrapper.width,wrapper.height],[717,917]);assert.deepEqual(plain(wrapper.children[0].children[0].strokes),[]);
+ const trim=wrapper.children[0].children.at(-1);assert.equal(trim.name,'Trim');assert.equal(trim.visible,false);
 });
 test('show bleed on an instance alone asks for a frame or component',async()=>{
  const {frame:component}=poster();component.type='COMPONENT';

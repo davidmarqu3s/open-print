@@ -15,15 +15,19 @@ let exportRun=Promise.resolve(),exportId=0,profileSave=Promise.resolve();
 // Show bleed adds this layer at the bottom of a frame. It holds the frame's background, sized to trim plus bleed, and its plugin data records the bleed in frame units.
 const BLEED_KEY='open-print-bleed',BLEED_GUIDE={type:'SOLID',color:{r:1,g:0.2,b:0.2}};
 const bleedLayer=frame=>(frame.children||[]).find(c=>typeof c.getPluginData==='function'&&c.getPluginData(BLEED_KEY)!=='')||null;
+// The trim outline is a locked, unfilled layer at the top of a frame with bleed, marking the original edge. Export hides it.
+const TRIM_KEY='open-print-trim',TRIM_GUIDE={type:'SOLID',color:{r:1,g:0.2,b:0.2}};
+const trimLayer=frame=>(frame.children||[]).find(c=>typeof c.getPluginData==='function'&&c.getPluginData(TRIM_KEY)!=='')||null;
 const bleedOf=frame=>{const layer=bleedLayer(frame),bleed=layer?Number(layer.getPluginData(BLEED_KEY)):0;return Number.isFinite(bleed)&&bleed>0?bleed:0;};
 // Frames, components and instances export. Instances can't take new layers, so they show their main component's bleed instead of their own.
 const PRINTABLE=['FRAME','COMPONENT','INSTANCE'];
-// An instance's layers match its main component's one for one, so its bleed layer sits where the main component's does.
-async function bleedLayerOf(node) {
- if(node.type!=='INSTANCE')return bleedLayer(node);
- const main=await node.getMainComponentAsync(),layer=main&&bleedLayer(main),i=layer?main.children.indexOf(layer):-1;
+// An instance's layers match its main component's one for one, so its bleed and trim layers sit where the main component's do.
+async function layerOf(node,find) {
+ if(node.type!=='INSTANCE')return find(node);
+ const main=await node.getMainComponentAsync(),layer=main&&find(main),i=layer?main.children.indexOf(layer):-1;
  return i>=0&&node.children[i]&&node.children[i].name===layer.name?node.children[i]:null;
 }
+const bleedLayerOf=node=>layerOf(node,bleedLayer);
 // An instance may be resized or scaled, so its bleed is measured from the layer rather than read from the main component.
 async function bleedOfNode(node) {
  if(node.type!=='INSTANCE')return bleedOf(node);
@@ -103,7 +107,7 @@ async function rasterise(original,copy,state,topLevel=false) {
 }
 // Returns the PDF and the factor its page must be scaled down by. The copy never touches the original.
 // print is how much a custom page size scales the frame; effects are rendered for that size.
-// A frame with bleed is exported from a copy inside a clipping frame of trim plus bleed, without the bleed layer's guide outline.
+// A frame with bleed is exported from a copy inside a clipping frame of trim plus bleed, without the bleed layer's guide outline or the trim outline.
 async function exportFrame(node,found,bleed=0,print=1) {
  if(!found.effects&&!bleed)return {pdf:await node.exportAsync({format:'PDF'}),scale:1};
  const width=node.width+2*bleed,height=node.height+2*bleed;
@@ -113,7 +117,7 @@ async function exportFrame(node,found,bleed=0,print=1) {
   copy=node.clone();
   if(bleed){
    wrapper=figma.createFrame();wrapper.name=node.name;wrapper.fills=[];wrapper.clipsContent=true;figma.currentPage.appendChild(wrapper);wrapper.resize(width,height);
-   wrapper.appendChild(copy);copy.x=bleed;copy.y=bleed;const guide=await bleedLayerOf(copy);if(guide)guide.strokes=[];
+   wrapper.appendChild(copy);copy.x=bleed;copy.y=bleed;const guide=await bleedLayerOf(copy),trim=await layerOf(copy,trimLayer);if(guide)guide.strokes=[];if(trim)trim.visible=false;
   }else figma.currentPage.appendChild(copy);
   const target=wrapper||copy;if(scale!==1)target.rescale(scale);copied=true;
   const state={images:[],print},ppi=found.effects?Math.min(Math.round(EFFECT_PPI*scale/print),found.raster?await rasterise(node,copy,state,true):Infinity):null;
@@ -128,7 +132,7 @@ async function exportFrame(node,found,bleed=0,print=1) {
  }
  finally{if(wrapper&&!wrapper.removed)wrapper.remove();else if(copy&&!copy.removed)copy.remove();}
 }
-// Puts the bleed on the canvas: the frame's fills move onto a locked layer of trim plus bleed with a dashed guide outline, and Clip content turns off so artwork past the edge shows. Running it again resizes the layer.
+// Puts the bleed on the canvas: the frame's fills move onto a locked layer of trim plus bleed with a dashed guide outline, and Clip content turns off so artwork past the edge shows. A solid outline on top marks the trim. Running it again resizes the layer.
 function showBleed(frame,bleed) {
  let layer=bleedLayer(frame);
  if(!layer){
@@ -140,11 +144,20 @@ function showBleed(frame,bleed) {
  }
  layer.locked=false;layer.resize(frame.width+2*bleed,frame.height+2*bleed);layer.x=-bleed;layer.y=-bleed;
  layer.constraints={horizontal:'STRETCH',vertical:'STRETCH'};layer.setPluginData(BLEED_KEY,String(bleed));layer.locked=true;
+ // Frames given bleed before the trim outline existed get one the next time bleed is set.
+ if(!trimLayer(frame)){
+  const trim=figma.createRectangle();trim.name='Trim';frame.appendChild(trim);
+  if(frame.layoutMode&&frame.layoutMode!=='NONE')trim.layoutPositioning='ABSOLUTE';
+  trim.fills=[];trim.strokes=[TRIM_GUIDE];trim.strokeWeight=1;trim.strokeAlign='CENTER';
+  trim.resize(frame.width,frame.height);trim.x=0;trim.y=0;trim.constraints={horizontal:'STRETCH',vertical:'STRETCH'};
+  trim.setPluginData(TRIM_KEY,'true');trim.locked=true;
+ }
 }
 // Undoes showBleed, keeping any change made to the background on the bleed layer.
 function hideBleed(frame) {
  const layer=bleedLayer(frame);if(!layer)return;
  frame.fills=layer.fills;layer.remove();
+ const trim=trimLayer(frame);if(trim)trim.remove();
  frame.clipsContent=frame.getPluginData(BLEED_KEY+'-clip')!=='false';frame.setPluginData(BLEED_KEY+'-clip','');
 }
 async function runExport(ids,id,prints) {
