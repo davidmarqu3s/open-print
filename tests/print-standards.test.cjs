@@ -29,6 +29,17 @@ test('through Ghostscript, pure black is K only and overprints, grey stays rich,
  const states=[...out.context.enumerateIndirectObjects()].map(([,o])=>o).filter(o=>o instanceof PDFDict&&o.get(PDFName.of('Type'))===PDFName.of('ExtGState'));
  assert(states.some(s=>s.get(PDFName.of('op'))===PDFLib.PDFBool.True&&s.get(PDFName.of('OPM')).asNumber()===1));
 });
+test('Ghostscript writes in points, so soft masks are not drawn under a scale macOS applies twice',async()=>{
+ const doc=await PDFDocument.create(),page=doc.addPage([200,100]);
+ const mask=doc.context.register(PDFRawStream.of(doc.context.obj({Type:'XObject',Subtype:'Form',BBox:[0,0,200,100],Group:{Type:'Group',S:'Transparency'}}),Buffer.from('1 g 20 20 100 60 re f')));
+ page.node.set(PDFName.of('Resources'),doc.context.obj({ExtGState:{M:doc.context.obj({Type:'ExtGState',SMask:{Type:'Mask',S:'Alpha',G:mask}})}}));
+ page.node.set(PDFName.of('Contents'),doc.context.register(PDFRawStream.of(doc.context.obj({}),Buffer.from('/M gs 1 0 0 rg 0 0 200 100 re f'))));
+ const out=await PDFDocument.load(await ghostscript(await doc.save(),FOGRA39())),contents=out.context.lookup(out.getPage(0).node.get(PDFName.of('Contents')));
+ const text=(contents instanceof PDFLib.PDFArray?contents.asArray():[contents]).map(ref=>Buffer.from(decodePDFRawStream(out.context.lookup(ref)).decode()).toString('latin1')).join('\n');
+ assert.match(text,/\/R\d+ gs/);assert.doesNotMatch(text,/0\.1 0 0 0\.1 0 0 cm/);
+ const masks=[...out.context.enumerateIndirectObjects()].map(([,o])=>o).filter(o=>o instanceof PDFDict&&o.get(PDFName.of('S'))===PDFName.of('Alpha'));assert(masks.length);
+ for(const m of masks){const box=out.context.lookup(m.get(PDFName.of('G'))).dict.lookup(PDFName.of('BBox')).asArray().map(n=>n.asNumber());assert(box[2]<=201&&box[3]<=101,'mask in points: '+box);}
+});
 test('PDF/X-4 files are PDF 1.6 with a document ID, Trapped key and XMP naming the standard',async()=>{
  const doc=await PDFDocument.create();doc.addPage([200,100]).drawRectangle({x:0,y:0,width:10,height:10,color:PDFLib.cmyk(0,0,0,1)});
  const bytes=await ghostscript(await doc.save(),FOGRA39(),'1.6'),output=await core.finish(bytes,FOGRA39(),70.56,35.28,'Coated FOGRA39',null,{bleeds:[3],pdfx:true,title:'Poster <A4> & “final”'});
