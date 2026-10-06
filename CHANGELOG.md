@@ -4,18 +4,13 @@ Notable changes to Open Print. Each release’s notes are also used on GitHub Re
 
 ## Unreleased
 
-## 0.1.0 – 2026-10-05
+## 0.1.0 – 2026-10-06
 
-The first public release. It replaces all earlier private test releases.
+First public release.
 
-### Features
-
-- Exports selected Figma frames as a vector CMYK PDF, converted entirely inside the plugin.
-- 15 included CMYK profiles, **No profile**, or your own custom CMYK ICC profile.
-- One multipage PDF, or individual PDFs saved one after another with each frame’s name.
-- Print sizes in mm or inches, with one-click snapping to standard paper sizes.
-- Bleed shown on the canvas, plus optional crop marks in Registration, with correct TrimBox and BleedBox.
-- Gradients exported as vector CMYK; shadows, blurs, noise and texture exported as images at print resolution.
-- Warnings for low-resolution images, and removal of leftover RGB colour spaces.
-- Figma-style dropdown menus.
-- The conversion engine is downloaded from this repository and checked against a fixed checksum.
+- Export Figma frames as print-ready vector CMYK PDFs, converted inside the plugin.
+- 15 included CMYK profiles, or your own ICC profile.
+- One multipage PDF, or one PDF per frame.
+- Print sizes in mm or inches, with snapping to standard paper sizes.
+- Bleed on the canvas and optional crop marks.
+- Gradients stay vector; shadows, blurs and textures export at print resolution.
