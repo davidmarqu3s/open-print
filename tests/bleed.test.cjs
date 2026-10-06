@@ -132,6 +132,8 @@ test('a custom page size fits the artwork, centred, and clips it to its trim plu
  const page=result.getPage(0),b=pt(1.5);
  for(const [actual,expected] of [[box(page.getMediaBox()),[0,0,pt(105)+2*b,pt(200)+2*b]],[box(page.getTrimBox()),[b,b,pt(105),pt(200)]],[box(page.getBleedBox()),[0,0,pt(105)+2*b,pt(200)+2*b]]])
   assert(actual.every((v,i)=>close(v,expected[i])),actual+' vs '+expected);
+ // Every content stream is an indirect object; an inline stream in /Contents left the PDF unreadable outside pdf-lib.
+ assert(page.node.Contents().asArray().every(item=>item instanceof PDFLib.PDFRef));
  const first=Buffer.from(PDFLib.decodePDFRawStream(result.context.lookup(page.node.Contents().asArray()[0])).decode()).toString();
  const [x,y,w,h]=first.match(/([\d.-]+) ([\d.-]+) ([\d.-]+) ([\d.-]+) re/).slice(1).map(Number);
  assert(close(x,0));assert(Math.abs(y-pt(25.75))<1e-3);assert(Math.abs(w-pt(108))<1e-3);assert(Math.abs(h-pt(151.5))<1e-3);assert.match(first,/W\nn/);

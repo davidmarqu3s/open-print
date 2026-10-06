@@ -323,7 +323,8 @@ var PrintCore = {
    // The exported page is the frame plus its bleed. Its top left goes to the bleed corner, so the trim lands on the TrimBox.
    page.translateContent(m+dx-cb,h+m-dy+cb-old);
    // Scaled artwork is clipped to its own trim plus the bleed, inside the BleedBox, so surplus bleed never shows in white space or under the marks.
-   if(fit){const aw=w-2*dx,ah=h-2*dy,x0=Math.max(m-b,m+dx-b),y0=Math.max(m-b,m+dy-b),x1=Math.min(m+w+b,m+dx+aw+b),y1=Math.min(m+h+b,m+dy+ah+b);page.node.wrapContentStreams(page.createContentStream(PDFLib.pushGraphicsState(),PDFLib.rectangle(x0,y0,x1-x0,y1-y0),PDFLib.clip(),PDFLib.endPath()),page.createContentStream(PDFLib.popGraphicsState()));}
+   // The clip streams must be registered: a stream written inline in /Contents makes the whole file unreadable.
+   if(fit){const aw=w-2*dx,ah=h-2*dy,x0=Math.max(m-b,m+dx-b),y0=Math.max(m-b,m+dy-b),x1=Math.min(m+w+b,m+dx+aw+b),y1=Math.min(m+h+b,m+dy+ah+b);const ref=stream=>doc.context.register(stream);page.node.wrapContentStreams(ref(page.createContentStream(PDFLib.pushGraphicsState(),PDFLib.rectangle(x0,y0,x1-x0,y1-y0),PDFLib.clip(),PDFLib.endPath())),ref(page.createContentStream(PDFLib.popGraphicsState())));}
    page.setMediaBox(0,0,w+2*m,h+2*m);page.setCropBox(0,0,w+2*m,h+2*m);page.setTrimBox(m,m,w,h);page.setBleedBox(m-b,m-b,w+2*b,h+2*b);
    if(marks)this.drawMarks(doc,page,{width:w,height:h},m,marks);
   }
