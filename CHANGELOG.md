@@ -4,7 +4,7 @@ Notable changes to Open Print. Each release’s notes are also used on GitHub Re
 
 ## Unreleased
 
-- Pure black text prints in black ink only and overprints.
+- Pure black prints in black ink only and overprints.
 - PDF/X-4 export.
 
 ## 0.1.0 – 2026-10-06

@@ -37,9 +37,9 @@ Tick **Crop marks** to add Registration marks outside the bleed, with your own o
 - **Shadows and blurs** are exported at about 300 ppi from a temporary scaled copy that is deleted straight afterwards.
 - **Noise and texture** layers become 300 ppi images, including any text inside them, so put noise on a background shape if you want text to stay vector.
 - **Other effects**, such as glass, are listed before export, with a **Show** button to find the layer.
-- **Black text** set in pure black (#000000) prints in black ink only (100% K) and overprints, so small type stays sharp. Black shapes keep rich black. Untick **Black text as 100% K** to keep rich black everywhere.
+- **Pure black** (#000000) text and shapes print in black ink only (100% K) and overprint, like InDesign’s [Black], so small type stays sharp. Figma exports text as outlines, so the plugin can’t treat text and shapes differently. For rich black on large areas, use a near-black such as #0A0A0A, or untick **Pure black as 100% K**.
 - **PDF/X-4** is on by default when a profile is chosen: the file is PDF 1.6 with the profile as its output intent, trim and bleed boxes, and the PDF/X-4 metadata printers check for.
-- **Not supported yet:** PDF/X-1a, spot colours, and overprint other than black text.
+- **Not supported yet:** PDF/X-1a, spot colours, and overprint other than pure black.
 
 Exporting never changes your Figma layers. Only **Add bleed** edits the file.
 

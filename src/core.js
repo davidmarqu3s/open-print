@@ -170,11 +170,14 @@ var PrintCore = {
   return lowest&&{ppi:Math.round(lowest.ppi),page:lowest.page,pages:doc.getPageCount()};
  },
  // Figma's pure black (#000000) converts to rich four-ink black, which blurs small type when plates misregister.
- // Before conversion, paint black text as 100% K that overprints. Ghostscript keeps DeviceCMYK as it is.
- blackTextContent(bytes) {
+ // Figma also exports text as outlines, so text and shapes look the same here. Like InDesign's [Black],
+ // every pure black fill and stroke becomes 100% K that overprints. Ghostscript keeps DeviceCMYK as it is.
+ pureBlackContent(bytes) {
   let text='';for(let i=0;i<bytes.length;i+=8192)text+=String.fromCharCode(...bytes.subarray(i,i+8192));
   const space=c=>/[\x00\t\n\f\r ]/.test(c),delimiter=c=>/[()[\]<>\/%]/.test(c),zero=o=>o.number&&Number(o.text)===0;
-  const edits=[];let operands=[],depth=0,arrayStart=0,fill={black:false,set:''},space_='',stack=[],inText=false,switched=false;
+  const edits=[],stack=[],FILL={cs:1,rg:1,g:1,k:1,sc:1,scn:1},STROKE={CS:1,RG:1,G:1,K:1,SC:1,SCN:1};
+  // Per side: the colour space name the content set, whether 0 0 0 1 k replaced it, and whether it is black now.
+  let operands=[],depth=0,arrayStart=0,state={fill:{space:'',swapped:false,black:false},stroke:{space:'',swapped:false,black:false}},shown='00';
   for(let i=0;i<text.length;){
    const c=text[i],start=i;if(space(c)){i++;continue;}
    if(c==='%'){while(i<text.length&&!/[\r\n]/.test(text[i]))i++;continue;}
@@ -189,29 +192,37 @@ var PrintCore = {
    if(/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$/.test(token)){operands.push({start,text:token,number:true});continue;}
    const from=operands.length?operands[0].start:start;
    if(token==='BI')return {bytes,used:false};
-   if(['cs','rg','g','k','sc','scn'].includes(token)){
-    // 0 0 0 1 k changed the colour space, so sc and scn need theirs back.
-    if(switched){edits.push({at:from,text:'/OPKOff gs '+((token==='sc'||token==='scn')&&space_?space_+' cs ':'')});switched=false;}
-    if(token==='cs'){space_=operands.length?operands[0].text:'';fill={black:false,set:text.slice(from,i)};}
-    else{const black=(token==='rg'||(token!=='g'&&token!=='k'&&space_!=='/Pattern'))&&operands.length===3&&operands.every(zero);
-     fill={black,set:(token==='sc'||token==='scn')&&space_?space_+' cs '+text.slice(from,i):text.slice(from,i)};}
+   if(FILL[token]||STROKE[token]){
+    const stroke=!!STROKE[token],side=stroke?state.stroke:state.fill,op=token.toLowerCase();
+    if(op==='cs'){side.space=operands.length?operands[0].text:'';side.swapped=false;side.black=false;}
+    else{
+     side.black=(op==='rg'||((op==='sc'||op==='scn')&&side.space!=='/Pattern'))&&operands.length===3&&operands.every(zero);
+     let replacement=null;
+     if(side.black){replacement=stroke?'0 0 0 1 K':'0 0 0 1 k';side.swapped=true;}
+     // 0 0 0 1 k changed the colour space, so sc and scn need theirs back.
+     else if((op==='sc'||op==='scn')&&side.swapped&&side.space){replacement=side.space+(stroke?' CS ':' cs ')+text.slice(from,i);side.swapped=false;}
+     else if(op!=='sc'&&op!=='scn')side.swapped=false;
+     const want=(state.fill.black?'1':'0')+(state.stroke.black?'1':'0');
+     if(want!==shown){replacement='/OPK'+want+' gs '+(replacement===null?text.slice(from,i):replacement);shown=want;}
+     if(replacement!==null)edits.push({from,to:i,text:replacement});
+    }
    }
-   else if(token==='q')stack.push({fill,space_});
-   else if(token==='Q'){const saved=stack.pop();if(saved)({fill,space_}=saved);}
-   else if(token==='BT')inText=true;
-   else if(token==='ET'){inText=false;if(switched){edits.push({at:i,text:'\n/OPKOff gs '+fill.set+'\n'});switched=false;}}
-   else if(inText&&['Tj','TJ',"'",'"'].includes(token)&&fill.black&&!switched){edits.push({at:from,text:'/OPKOn gs 0 0 0 1 k '});switched=true;}
+   // Images, shadings and Forms paint their own colours, and a Form inherits its caller's overprint, so switch it off around them.
+   else if((token==='Do'||token==='sh')&&shown!=='00')edits.push({from,to:from,text:'/OPK00 gs '},{from:i,to:i,text:' /OPK'+shown+' gs'});
+   else if(token==='q')stack.push({state:JSON.parse(JSON.stringify(state)),shown});
+   else if(token==='Q'){const saved=stack.pop();if(saved)({state,shown}=saved);}
    operands=[];
   }
   if(!edits.length)return {bytes,used:false};
-  let result='',last=0;for(const edit of edits){result+=text.slice(last,edit.at)+edit.text;last=edit.at;}result+=text.slice(last);
+  let result='',last=0;for(const edit of edits){result+=text.slice(last,edit.from)+edit.text;last=edit.to;}result+=text.slice(last);
   return {bytes:Uint8Array.from(result,c=>c.charCodeAt(0)),used:true};
  },
- blackText(doc) {
+ pureBlack(doc) {
   const {PDFName,PDFDict,PDFRawStream,PDFArray,PDFRef,decodePDFRawStream}=PDFLib;
-  const states=()=>({OPKOn:doc.context.obj({Type:'ExtGState',OP:true,op:true,OPM:1}),OPKOff:doc.context.obj({Type:'ExtGState',OP:false,op:false,OPM:0})});
+  // Overprint for the fill and stroke separately: OPK10 is a black fill only, OPK01 a black stroke only.
+  const states=()=>Object.fromEntries(['00','10','01','11'].map(k=>['OPK'+k,doc.context.obj({Type:'ExtGState',op:k[0]==='1',OP:k[1]==='1',OPM:k==='00'?0:1})]));
   const addStates=resources=>{let gs=doc.context.lookup(resources.get(PDFName.of('ExtGState')));if(!(gs instanceof PDFDict)){gs=doc.context.obj({});resources.set(PDFName.of('ExtGState'),gs);}for(const [name,value] of Object.entries(states()))gs.set(PDFName.of(name),value);};
-  const rewrite=stream=>{const {bytes,used}=this.blackTextContent(decodePDFRawStream(stream).decode());if(!used)return null;const fixed=doc.context.flateStream(bytes);for(const [key,value] of stream.dict.entries())if(!['Length','Filter','DecodeParms'].includes(key.decodeText()))fixed.dict.set(key,value);return fixed;};
+  const rewrite=stream=>{const {bytes,used}=this.pureBlackContent(decodePDFRawStream(stream).decode());if(!used)return null;const fixed=doc.context.flateStream(bytes);for(const [key,value] of stream.dict.entries())if(!['Length','Filter','DecodeParms'].includes(key.decodeText()))fixed.dict.set(key,value);return fixed;};
   // Soft masks paint coverage, not ink, so their content stays as it is.
   const masks=new Set();
   // Graphics states are often direct objects inside resources, so look inside every dictionary and array.
@@ -229,7 +240,7 @@ var PrintCore = {
    // Pages draw their content as one stream, so join them and keep the result as one.
    const streams=refs.map(ref=>doc.context.lookup(ref)).filter(s=>s instanceof PDFRawStream);if(streams.length!==refs.length)continue;
    const parts=streams.map(s=>decodePDFRawStream(s).decode()),joined=new Uint8Array(parts.reduce((n,b)=>n+b.length+1,0));let at=0;for(const b of parts){joined.set(b,at);at+=b.length;joined[at++]=10;}
-   const result=this.blackTextContent(joined);if(!result.used)continue;
+   const result=this.pureBlackContent(joined);if(!result.used)continue;
    page.node.set(PDFName.of('Contents'),doc.context.register(doc.context.flateStream(result.bytes)));
    addStates(page.node.normalizedEntries().Resources);
   }
