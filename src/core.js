@@ -169,6 +169,82 @@ var PrintCore = {
   });
   return lowest&&{ppi:Math.round(lowest.ppi),page:lowest.page,pages:doc.getPageCount()};
  },
+ // Figma's pure black (#000000) converts to rich four-ink black, which blurs small type when plates misregister.
+ // Figma also exports text as outlines, so text and shapes look the same here. Like InDesign's [Black],
+ // every pure black fill and stroke becomes 100% K that overprints. Ghostscript keeps DeviceCMYK as it is.
+ pureBlackContent(bytes) {
+  let text='';for(let i=0;i<bytes.length;i+=8192)text+=String.fromCharCode(...bytes.subarray(i,i+8192));
+  const space=c=>/[\x00\t\n\f\r ]/.test(c),delimiter=c=>/[()[\]<>\/%]/.test(c),zero=o=>o.number&&Number(o.text)===0;
+  const edits=[],stack=[],FILL={cs:1,rg:1,g:1,k:1,sc:1,scn:1},STROKE={CS:1,RG:1,G:1,K:1,SC:1,SCN:1};
+  // Per side: the colour space name the content set, whether 0 0 0 1 k replaced it, and whether it is black now.
+  let operands=[],depth=0,arrayStart=0,state={fill:{space:'',swapped:false,black:false},stroke:{space:'',swapped:false,black:false}},shown='00';
+  for(let i=0;i<text.length;){
+   const c=text[i],start=i;if(space(c)){i++;continue;}
+   if(c==='%'){while(i<text.length&&!/[\r\n]/.test(text[i]))i++;continue;}
+   if(c==='('){let nesting=1;i++;while(i<text.length&&nesting){if(text[i]==='\\'){i+=2;continue;}if(text[i]==='(')nesting++;if(text[i]===')')nesting--;i++;}if(!depth)operands.push({start});continue;}
+   if(c==='<'&&text[i+1]!=='<'){i++;while(i<text.length&&text[i]!=='>')i++;i++;if(!depth)operands.push({start});continue;}
+   if(c==='['||text.slice(i,i+2)==='<<'){if(!depth++)arrayStart=start;i+=c==='['?1:2;continue;}
+   if(c===']'||text.slice(i,i+2)==='>>'){i+=c===']'?1:2;if(!--depth)operands.push({start:arrayStart});continue;}
+   if(c==='/'){i++;while(i<text.length&&!space(text[i])&&!delimiter(text[i]))i++;if(!depth)operands.push({start,text:text.slice(start,i)});continue;}
+   if(delimiter(c)){i++;continue;}
+   while(i<text.length&&!space(text[i])&&!delimiter(text[i]))i++;
+   const token=text.slice(start,i);if(depth)continue;
+   if(/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$/.test(token)){operands.push({start,text:token,number:true});continue;}
+   const from=operands.length?operands[0].start:start;
+   if(token==='BI')return {bytes,used:false};
+   if(FILL[token]||STROKE[token]){
+    const stroke=!!STROKE[token],side=stroke?state.stroke:state.fill,op=token.toLowerCase();
+    if(op==='cs'){side.space=operands.length?operands[0].text:'';side.swapped=false;side.black=false;}
+    else{
+     side.black=(op==='rg'||((op==='sc'||op==='scn')&&side.space!=='/Pattern'))&&operands.length===3&&operands.every(zero);
+     let replacement=null;
+     if(side.black){replacement=stroke?'0 0 0 1 K':'0 0 0 1 k';side.swapped=true;}
+     // 0 0 0 1 k changed the colour space, so sc and scn need theirs back.
+     else if((op==='sc'||op==='scn')&&side.swapped&&side.space){replacement=side.space+(stroke?' CS ':' cs ')+text.slice(from,i);side.swapped=false;}
+     else if(op!=='sc'&&op!=='scn')side.swapped=false;
+     const want=(state.fill.black?'1':'0')+(state.stroke.black?'1':'0');
+     if(want!==shown){replacement='/OPK'+want+' gs '+(replacement===null?text.slice(from,i):replacement);shown=want;}
+     if(replacement!==null)edits.push({from,to:i,text:replacement});
+    }
+   }
+   // Images, shadings and Forms paint their own colours, and a Form inherits its caller's overprint, so switch it off around them.
+   else if((token==='Do'||token==='sh')&&shown!=='00')edits.push({from,to:from,text:'/OPK00 gs '},{from:i,to:i,text:' /OPK'+shown+' gs'});
+   else if(token==='q')stack.push({state:JSON.parse(JSON.stringify(state)),shown});
+   else if(token==='Q'){const saved=stack.pop();if(saved)({state,shown}=saved);}
+   operands=[];
+  }
+  if(!edits.length)return {bytes,used:false};
+  let result='',last=0;for(const edit of edits){result+=text.slice(last,edit.from)+edit.text;last=edit.to;}result+=text.slice(last);
+  return {bytes:Uint8Array.from(result,c=>c.charCodeAt(0)),used:true};
+ },
+ pureBlack(doc) {
+  const {PDFName,PDFDict,PDFRawStream,PDFArray,PDFRef,decodePDFRawStream}=PDFLib;
+  // Overprint for the fill and stroke separately: OPK10 is a black fill only, OPK01 a black stroke only.
+  const states=()=>Object.fromEntries(['00','10','01','11'].map(k=>['OPK'+k,doc.context.obj({Type:'ExtGState',op:k[0]==='1',OP:k[1]==='1',OPM:k==='00'?0:1})]));
+  const addStates=resources=>{let gs=doc.context.lookup(resources.get(PDFName.of('ExtGState')));if(!(gs instanceof PDFDict)){gs=doc.context.obj({});resources.set(PDFName.of('ExtGState'),gs);}for(const [name,value] of Object.entries(states()))gs.set(PDFName.of(name),value);};
+  const rewrite=stream=>{const {bytes,used}=this.pureBlackContent(decodePDFRawStream(stream).decode());if(!used)return null;const fixed=doc.context.flateStream(bytes);for(const [key,value] of stream.dict.entries())if(!['Length','Filter','DecodeParms'].includes(key.decodeText()))fixed.dict.set(key,value);return fixed;};
+  // Soft masks paint coverage, not ink, so their content stays as it is.
+  const masks=new Set();
+  // Graphics states are often direct objects inside resources, so look inside every dictionary and array.
+  const find=(value,depth)=>{if(depth>12)return;if(value instanceof PDFDict){const mask=doc.context.lookup(value.get(PDFName.of('SMask')));if(mask instanceof PDFDict&&mask.get(PDFName.of('G')))masks.add(mask.get(PDFName.of('G')).toString());for(const child of value.values())if(!(child instanceof PDFRef))find(child,depth+1);}else if(value instanceof PDFArray)for(const child of value.asArray())if(!(child instanceof PDFRef))find(child,depth+1);};
+  for(const [,object] of doc.context.enumerateIndirectObjects())find(object instanceof PDFRawStream?object.dict:object,0);
+  for(const [ref,object] of doc.context.enumerateIndirectObjects()){
+   if(!(object instanceof PDFRawStream)||object.dict.get(PDFName.of('Subtype'))!==PDFName.of('Form')||masks.has(ref.toString()))continue;
+   const fixed=rewrite(object);if(!fixed)continue;
+   let resources=doc.context.lookup(fixed.dict.get(PDFName.of('Resources')));if(!(resources instanceof PDFDict)){resources=doc.context.obj({});fixed.dict.set(PDFName.of('Resources'),resources);}
+   addStates(resources);doc.context.assign(ref,fixed);
+  }
+  for(const page of doc.getPages()){
+   const contents=page.node.get(PDFName.of('Contents'));if(!contents)continue;
+   const object=doc.context.lookup(contents),refs=object instanceof PDFArray?object.asArray():[contents];
+   // Pages draw their content as one stream, so join them and keep the result as one.
+   const streams=refs.map(ref=>doc.context.lookup(ref)).filter(s=>s instanceof PDFRawStream);if(streams.length!==refs.length)continue;
+   const parts=streams.map(s=>decodePDFRawStream(s).decode()),joined=new Uint8Array(parts.reduce((n,b)=>n+b.length+1,0));let at=0;for(const b of parts){joined.set(b,at);at+=b.length;joined[at++]=10;}
+   const result=this.pureBlackContent(joined);if(!result.used)continue;
+   page.node.set(PDFName.of('Contents'),doc.context.register(doc.context.flateStream(result.bytes)));
+   addStates(page.node.normalizedEntries().Resources);
+  }
+ },
  // Crop marks: offset and length in mm, weight in points. Offset may not be less than the bleed, so marks never sit on artwork.
  marksProblem(marks,bleed=0) {
   if(!marks)return '';
@@ -197,7 +273,30 @@ var PrintCore = {
   // A stream of its own after everything else, so the artwork's translation doesn't apply to the marks.
   page.node.addContentStream(doc.context.register(doc.context.contentStream(ops)));
  },
+ // PDF/X-4 (ISO 15930-7) is PDF 1.6 with an output intent, trim boxes, a Trapped key, a document ID and XMP
+ // naming the standard. finish() already sets the rest; Ghostscript wrote PDF 1.6 for the same export.
+ markPDFX4(doc,title,now=new Date()) {
+  const {PDFName,PDFHexString,PDFRawStream}=PDFLib;
+  now=new Date(Math.floor(now.getTime()/1000)*1000);const date=now.toISOString().replace('.000','');
+  const random=()=>{const bytes=new Uint8Array(16);if(typeof crypto!=='undefined'&&crypto.getRandomValues)crypto.getRandomValues(bytes);else for(let i=0;i<16;i++)bytes[i]=Math.random()*256|0;return [...bytes].map(b=>b.toString(16).padStart(2,'0')).join('');};
+  const id=random(),instance=random(),uuid=hex=>'uuid:'+hex.slice(0,8)+'-'+hex.slice(8,12)+'-'+hex.slice(12,16)+'-'+hex.slice(16,20)+'-'+hex.slice(20);
+  const producer='Open Print · Ghostscript + pdf-lib',xml=text=>text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  doc.setTitle(title);doc.setCreator('Figma');doc.setProducer(producer);doc.setCreationDate(now);doc.setModificationDate(now);
+  doc.getInfoDict().set(PDFName.of('Trapped'),PDFName.of('False'));
+  doc.context.trailerInfo.ID=doc.context.obj([PDFHexString.of(id),PDFHexString.of(instance)]);
+  const packet='<?xpacket begin="\uFEFF" id="W5M0MpCehiHzreSzNTczkc9d"?>\n<x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">\n'+
+   '<rdf:Description rdf:about="" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:xmp="http://ns.adobe.com/xap/1.0/" xmlns:pdf="http://ns.adobe.com/pdf/1.3/" xmlns:xmpMM="http://ns.adobe.com/xap/1.0/mm/" xmlns:pdfxid="http://www.npes.org/pdfx/ns/id/">\n'+
+   '<dc:format>application/pdf</dc:format><dc:title><rdf:Alt><rdf:li xml:lang="x-default">'+xml(title)+'</rdf:li></rdf:Alt></dc:title>\n'+
+   '<xmp:CreateDate>'+date+'</xmp:CreateDate><xmp:ModifyDate>'+date+'</xmp:ModifyDate><xmp:MetadataDate>'+date+'</xmp:MetadataDate><xmp:CreatorTool>Figma</xmp:CreatorTool>\n'+
+   '<pdf:Producer>'+xml(producer)+'</pdf:Producer><pdf:Trapped>False</pdf:Trapped>\n'+
+   '<xmpMM:DocumentID>'+uuid(id)+'</xmpMM:DocumentID><xmpMM:InstanceID>'+uuid(instance)+'</xmpMM:InstanceID><xmpMM:VersionID>1</xmpMM:VersionID><xmpMM:RenditionClass>default</xmpMM:RenditionClass>\n'+
+   '<pdfxid:GTS_PDFXVersion>PDF/X-4</pdfxid:GTS_PDFXVersion>\n</rdf:Description></rdf:RDF></x:xmpmeta>\n<?xpacket end="w"?>';
+  const bytes=new TextEncoder().encode(packet);
+  doc.catalog.set(PDFName.of('Metadata'),doc.context.register(PDFRawStream.of(doc.context.obj({Type:'Metadata',Subtype:'XML',Length:bytes.length}),bytes)));
+  doc.catalog.delete(PDFName.of('Version'));
+ },
  // options.bleeds: each page's bleed in mm, already exported around the artwork. options.marks: crop marks, or null.
+ // options.pdfx: mark the file PDF/X-4, titled options.title.
  async finish(bytes,icc,width,height,profileName,pageSizes,options={}) {
   if(icc) this.validateICC(icc);
   const {PDFDocument,PDFName,PDFString}=PDFLib;
@@ -224,6 +323,11 @@ var PrintCore = {
   doc.catalog.set(PDFName.of('OutputIntents'),doc.context.obj([intent]));
   }
   doc.setProducer('Open Print · Ghostscript + pdf-lib');
-  return doc.save();
+  if(!options.pdfx)return doc.save();
+  if(!icc)throw new Error('PDF/X-4 needs a colour profile.');
+  this.markPDFX4(doc,options.title||'Untitled');
+  // pdf-lib always writes a 1.7 header. 1.6 is the same length, so no offsets move.
+  const saved=await doc.save(),header=String.fromCharCode(...saved.subarray(0,8));if(header!=='%PDF-1.7')throw new Error('Unexpected PDF header.');
+  saved[7]=0x36;return saved;
  }
 };
