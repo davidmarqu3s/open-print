@@ -52,7 +52,8 @@ function renderIssues(frame){
  }
  if(own.length>ISSUES_PER_FRAME){const li=document.createElement('li');li.className='issue more';li.textContent='+'+(own.length-ISSUES_PER_FRAME)+' more in this frame';el('frames').append(li);}
 }
-function renderFrames(){el('frames').replaceChildren();el('frames').className=issues.length?'expanded':'';if(!frames.length){const li=document.createElement('li');li.className='empty';li.textContent='Select one or more frames on the canvas.';el('frames').append(li);}for(const frame of frames){const valid=frame.type==='FRAME',li=document.createElement('li'),size=document.createElement('span');li.className=valid?'':'invalid';li.innerHTML=valid?FRAME_ICON:WARNING_ICON;size.className='size';size.textContent=valid?formatSize(PrintCore.frameSize(frame.width,frame.height))+(frameBleed(frame)?' + '+formatLength(frameBleed(frame))+' bleed':''):'Not a frame';size.title=frameBleed(frame)?'Bleed '+formatLength(frameBleed(frame))+' on each side':'';li.append(nameNode(frame.name),size);el('frames').append(li);renderIssues(frame);}}
+function renderFrames(){el('frames').replaceChildren();el('frames').className=issues.length?'expanded':'';if(!frames.length){const li=document.createElement('li');li.className='empty';li.textContent='Select one or more frames on the canvas.';el('frames').append(li);}for(const frame of frames){const valid=frame.type==='FRAME',li=document.createElement('li'),size=document.createElement('span');li.className=valid?'':'invalid';li.innerHTML=valid?FRAME_ICON:WARNING_ICON;size.className='size';// Page size and Bleed already give the sizes, so a frame row is just its name; only a non-frame says why it's flagged.
+li.append(nameNode(frame.name));if(!valid){size.textContent='Not a frame';li.append(size);}el('frames').append(li);renderIssues(frame);}}
 function sizeProblem(){if(autoSize)return '';if(dimensions.width===null||dimensions.height===null)return 'Enter a width and height.';try{PrintCore.points(dimensions.width);PrintCore.points(dimensions.height);return '';}catch(error){return error.message;}}
 function fieldInvalid(id){if(autoSize||dimensions[id]===null)return false;try{PrintCore.points(dimensions[id]);return false;}catch(error){return true;}}
 function profileProblem(){if(el('profile-mode').value==='none'||profile)return '';const entry=PROFILE_CATALOG.find(p=>p.id===el('profile-mode').value);return entry?'Import '+entry.name+' to export.':'Choose a CMYK profile to export.';}
@@ -84,7 +85,7 @@ function updateSize(){
   dimensions={width:same?sizes[0].width:null,height:same?sizes[0].height:null};
   el('width').value=displayDimension(dimensions.width);el('height').value=displayDimension(dimensions.height);
   el('width').placeholder=sizes.length?'Varies':'';el('height').placeholder=sizes.length?'Varies':'';
-  el('size-hint').textContent=!sizes.length?'Select frames to calculate their print size.':same?'':'Each PDF page uses its own frame’s inferred size. Enter dimensions to override all pages.';
+  el('size-hint').textContent=!sizes.length?'Select frames to calculate their print size.':same?'':'Each PDF page uses its own frame’s size. Enter dimensions to override all pages.';
   showPaperMatch(same?paperMatch(sizes[0]):null);
  }else{el('size-hint').textContent='Your size applies to every page. Artwork keeps its size, aligned top left; smaller pages crop it.';showPaperMatch(null);}
  el('size-hint').hidden=!el('size-hint').textContent;el('size-reset').hidden=autoSize||!valid.length;
