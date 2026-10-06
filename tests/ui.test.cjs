@@ -174,3 +174,28 @@ test('components export, and an instance points to its main component for bleed'
 test('a click on a header button toggles once, not again when it bubbles to the row',async()=>{const {window,el}=ui();await window.onmessage({data:{pluginMessage:{type:'selection',frames:[frame('1',595,842)]}}});el('marks-toggle').onclick();el('marks-head').onclick({target:{},composedPath:()=>[{},el('marks-toggle'),el('marks-head')]});assert.equal(el('marks-options').hidden,false);});
 test('large frames a little off a standard size still get the suggestion',async()=>{const {window,el}=ui();await window.onmessage({data:{pluginMessage:{type:'selection',frames:[frame('1',2380,3368)]}}});assert.equal(el('size-match').hidden,false);assert.match(el('size-match-text').textContent,/A0/);await window.onmessage({data:{pluginMessage:{type:'selection',frames:[frame('2',590,842)]}}});assert.equal(el('size-match').hidden,true);});
 test('New frame posts the chosen size and resets, and no selection leaves the page size hint empty',async()=>{const {window,el,messages}=ui();await window.onmessage({data:{pluginMessage:{type:'selection',frames:[]}}});assert.equal(el('size-hint').textContent,'');assert.equal(el('size-hint').hidden,true);el('new-frame').value='A5';el('new-frame').onchange();assert.deepEqual({...messages.at(-1)},{type:'new-frame',size:'A5'});assert.equal(el('new-frame').value,'');});
+test('preflight shows a count in the footer and lists problems under their frame when shown',async()=>{
+ const h=ui();h.el('pure-black').checked=true;await select(h,[frame('1',595,842)]);assert.equal(h.el('preflight').hidden,false);assert.equal(h.el('preflight-summary').textContent,'Checking…');
+ await send(h,{type:'preflight',frames:[{id:'1',findings:[{kind:'image',nodeId:'5',name:'Photo',ppi:120},{kind:'image',nodeId:'6',name:'Logo',ppi:400},{kind:'text',nodeId:'7',name:'Caption',size:5,rich:null,pure:5,gap:20}]}]});
+ assert.equal(h.el('preflight-summary').textContent,'2 problems');assert.match(h.el('preflight-summary').className,/error/);assert.equal(h.el('frames').children.length,1,'listed only when shown');
+ h.el('preflight-toggle').onclick();const rows=h.el('frames').children;
+ assert.deepEqual(rows.slice(1).map(r=>r.textContent.replace(/Show$/,'')),['120 ppi image · Photo','5 pt text · Caption']);assert.equal(rows[2].className,'issue warning');
+ rows[1].children[1].onclick();assert.equal(h.messages.at(-1).type,'show-layer');assert.equal(h.messages.at(-1).id,'5');
+ assert.equal(h.el('preflight-toggle').textContent,'Hide');h.el('preflight-toggle').onclick();assert.equal(h.el('frames').children.length,1);
+});
+test('preflight limits apply at print size, and pure black only counts as rich black when it is off',async()=>{
+ const h=ui();h.el('pure-black').checked=true;await select(h,[frame('1',595,842)]);
+ await send(h,{type:'preflight',frames:[{id:'1',findings:[{kind:'image',nodeId:'5',name:'Photo',ppi:310},{kind:'text',nodeId:'7',name:'Caption',size:10,rich:null,pure:10,gap:null}]}]});
+ assert.equal(h.el('preflight-summary').textContent,'No problems');assert.match(h.el('preflight-summary').className,/ok/);
+ // Doubling the page size halves the image's ppi.
+ h.el('width').value='420';h.el('width').oninput();h.el('height').value='594';h.el('height').oninput();assert.equal(h.el('preflight-summary').textContent,'1 problem');
+ h.el('size-reset').onclick();assert.equal(h.el('preflight-summary').textContent,'No problems');
+ h.el('pure-black').checked=false;h.el('pure-black').onchange();assert.equal(h.el('preflight-summary').textContent,'1 problem');
+ h.el('preflight-toggle').onclick();assert.match(h.el('frames').children[1].textContent,/Rich black 10 pt text · Caption/);
+});
+test('long preflight lists show three per frame until expanded',async()=>{
+ const h=ui();await select(h,[frame('1',595,842)]);
+ await send(h,{type:'preflight',frames:[{id:'1',findings:[1,2,3,4,5].map(n=>({kind:'stroke',nodeId:String(n),name:'Rule '+n,weight:0.1}))}]});
+ h.el('preflight-toggle').onclick();let rows=h.el('frames').children;assert.equal(rows.length,5);assert.equal(rows[4].textContent,'2 more in this frame');
+ rows[4].children[0].onclick();rows=h.el('frames').children;assert.equal(rows.length,6);assert.match(rows[5].textContent,/0.1 pt hairline · Rule 5/);
+});

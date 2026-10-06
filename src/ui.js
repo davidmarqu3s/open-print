@@ -56,17 +56,53 @@ function nameNode(text){
  name.className='name';name.title=text;start.className='start';end.className='end';start.textContent=chars.slice(0,cut).join('');end.textContent=chars.slice(cut).join('');name.append(start,end);return name;
 }
 const ISSUE_LABELS={effect:'Unsupported effect'},ISSUES_PER_FRAME=3;
-function renderIssues(frame){
- const own=issues.filter(issue=>issue.frameId===frame.id);
- for(const issue of own.slice(0,ISSUES_PER_FRAME)){
-  const li=document.createElement('li'),show=document.createElement('button');li.className='issue';
-  show.className='link';show.textContent='Show';show.title='Zoom to '+issue.name;show.onclick=()=>parent.postMessage({pluginMessage:{type:'show-layer',id:issue.nodeId}},'*');
-  li.append(nameNode((ISSUE_LABELS[issue.kind]||'Issue')+' · '+issue.name),show);el('frames').append(li);
+// Preflight limits at print size, after any scaling to a typed page size. Errors are things the printer will reject or that print visibly wrong; warnings are worth a look.
+const PREFLIGHT={lowPpi:150,targetPpi:300,smallText:6,richText:12,safe:3,hairline:0.25,bleed:3},POINTS_PER_MM=72/25.4;
+let checks=new Map(),checksOpen=false,openFrames=new Set();
+function preflightIssues(frame){
+ const check=checks.get(frame.id);if(!check||!printable(frame))return [];
+ const fit=fitFor(frame),scale=fit?fit.scale:1,pt=v=>Math.round(v*scale*10)/10+' pt',out=[];
+ const add=(severity,label,f)=>out.push({severity,label,name:f.name,nodeId:f.nodeId,frameId:frame.id});
+ for(const f of check.findings){
+  if(f.kind==='effect')add('error','Unsupported effect',f);
+  if(f.kind==='image'){const ppi=Math.round(f.ppi/scale);if(ppi<PREFLIGHT.targetPpi)add(ppi<PREFLIGHT.lowPpi?'error':'warning',ppi+' ppi image',f);}
+  if(f.kind==='stroke'&&f.weight*scale<PREFLIGHT.hairline)add('warning',pt(f.weight)+' hairline',f);
+  if(f.kind==='bleed')add('warning','Needs bleed',f);
+  if(f.kind!=='text')continue;
+   if(f.size!==null&&f.size*scale<PREFLIGHT.smallText)add('warning',pt(f.size)+' text',f);
+  // Without Pure black as 100% K, #000000 prints in four inks too.
+  const rich=Math.min(f.rich===null?Infinity:f.rich,f.pure!==null&&!el('pure-black').checked?f.pure:Infinity);
+  if(rich*scale<PREFLIGHT.richText)add('warning','Rich black '+pt(rich)+' text',f);
+  if(f.gap!==null&&f.gap*scale<PREFLIGHT.safe*POINTS_PER_MM)add('warning','Within '+PREFLIGHT.safe+' mm of the edge',f);
  }
- if(own.length>ISSUES_PER_FRAME){const li=document.createElement('li');li.className='issue more';li.textContent='+'+(own.length-ISSUES_PER_FRAME)+' more in this frame';el('frames').append(li);}
+ // Bleed shrunk by a smaller page size already blocks export, so this covers bleed that was set too small.
+ const bleed=pdfBleed(frame);if(bleed>0&&bleed<PREFLIGHT.bleed-0.005&&!scaleProblem().text)add('warning','Bleed under '+PREFLIGHT.bleed+' mm',{name:frame.name,nodeId:frame.id});
+ return out.sort((a,b)=>(a.severity==='error'?0:1)-(b.severity==='error'?0:1));
 }
-function renderFrames(){el('frames').replaceChildren();el('frames').className=issues.length?'expanded':'';if(!frames.length){const li=document.createElement('li');li.className='empty';li.textContent='Select frames or components on the canvas.';el('frames').append(li);}for(const frame of frames){const valid=printable(frame),li=document.createElement('li'),size=document.createElement('span');li.className=valid?'':'invalid';li.innerHTML=!valid?WARNING_ICON:frame.type==='COMPONENT'?COMPONENT_ICON:frame.type==='INSTANCE'?INSTANCE_ICON:FRAME_ICON;size.className='size';// Page size and Bleed already give the sizes, so a frame row is just its name; only a non-frame says why it's flagged.
-li.append(nameNode(frame.name));if(!valid){size.textContent='Not a frame or component';li.append(size);}el('frames').append(li);renderIssues(frame);}}
+// The footer line works like InDesign's preflight light: a dot and a count, with the problems listed under their frames when shown.
+function renderPreflight(){
+ const valid=frames.filter(printable),checked=valid.every(f=>checks.has(f.id)),all=valid.flatMap(preflightIssues),errors=all.some(i=>i.severity==='error');
+ el('preflight').hidden=!valid.length;if(!valid.length)return;
+ el('preflight-summary').textContent=!checked?'Checking…':!all.length?'No problems':all.length===1?'1 problem':all.length+' problems';
+ el('preflight-summary').className='preflight-summary'+(!checked?'':!all.length?' ok':errors?' error':' warning');
+ el('preflight-toggle').hidden=!all.length;el('preflight-toggle').textContent=checksOpen?'Hide':'Show';
+}
+function issueRow(issue,warning){
+ const li=document.createElement('li'),show=document.createElement('button');li.className='issue'+(warning?' warning':'');
+ show.className='link';show.textContent='Show';show.title='Zoom to '+issue.name;show.onclick=()=>parent.postMessage({pluginMessage:{type:'show-layer',id:issue.nodeId}},'*');
+ li.append(nameNode(issue.label+' · '+issue.name),show);return li;
+}
+// Export errors always show. Preflight problems show when the footer line is open, a few per frame unless that frame is expanded.
+function renderIssues(frame){
+ const own=checksOpen?preflightIssues(frame):[];
+ for(const issue of issues.filter(i=>i.frameId===frame.id))if(!own.some(i=>i.nodeId===issue.nodeId&&i.label===(ISSUE_LABELS[issue.kind]||'Issue')))own.unshift({severity:'error',label:ISSUE_LABELS[issue.kind]||'Issue',name:issue.name,nodeId:issue.nodeId,frameId:frame.id});
+ const shown=openFrames.has(frame.id)?own:own.slice(0,ISSUES_PER_FRAME);
+ for(const issue of shown)el('frames').append(issueRow(issue,issue.severity==='warning'));
+ if(own.length>shown.length){const li=document.createElement('li'),more=document.createElement('button');li.className='issue more';more.className='link';more.textContent=(own.length-shown.length)+' more in this frame';more.onclick=()=>{openFrames.add(frame.id);renderFrames();};li.append(more);el('frames').append(li);}
+ return own.length;
+}
+function renderFrames(){el('frames').replaceChildren();let listed=0;if(!frames.length){const li=document.createElement('li');li.className='empty';li.textContent='Select frames or components on the canvas.';el('frames').append(li);}for(const frame of frames){const valid=printable(frame),li=document.createElement('li'),size=document.createElement('span');li.className=valid?'':'invalid';li.innerHTML=!valid?WARNING_ICON:frame.type==='COMPONENT'?COMPONENT_ICON:frame.type==='INSTANCE'?INSTANCE_ICON:FRAME_ICON;size.className='size';// Page size and Bleed already give the sizes, so a frame row is just its name; only a non-frame says why it's flagged.
+li.append(nameNode(frame.name));if(!valid){size.textContent='Not a frame or component';li.append(size);}el('frames').append(li);listed+=renderIssues(frame);}el('frames').className=listed?'expanded':'';}
 function sizeProblem(){if(autoSize)return '';if(dimensions.width===null||dimensions.height===null)return 'Enter a width and height.';try{PrintCore.points(dimensions.width);PrintCore.points(dimensions.height);return '';}catch(error){return error.message;}}
 function fieldInvalid(id){if(autoSize||dimensions[id]===null)return false;try{PrintCore.points(dimensions[id]);return false;}catch(error){return true;}}
 function profileProblem(){if(el('profile-mode').value==='none'||profile)return '';const entry=PROFILE_CATALOG.find(p=>p.id===el('profile-mode').value);return entry?'Import '+entry.name+' to export.':'Choose a CMYK profile to export.';}
@@ -95,7 +131,8 @@ function refresh(){const invalid=frames.filter(f=>!printable(f)),problem=sizePro
  // The page size sits under the last section that is on.
  el('sheet-hint').textContent=sheetHint();el('sheet-hint').hidden=!el('sheet-hint').textContent;if(!marksOn()&&anyBleed)el('bleed-section').append(el('sheet-hint'));else el('marks-section').append(el('sheet-hint'));
  // PDF/X needs an output intent, so it waits for a profile.
- el('pdfx').disabled=locked||!profile;el('pure-black').disabled=locked;el('pdfx-hint').textContent=profile||!el('pdfx').checked?'':'PDF/X-4 needs a color profile.';}
+ el('pdfx').disabled=locked||!profile;el('pure-black').disabled=locked;el('pdfx-hint').textContent=profile||!el('pdfx').checked?'':'PDF/X-4 needs a color profile.';
+ renderPreflight();if(checksOpen)renderFrames();}
 function stop(){if(engineAbort){engineAbort.abort();engineAbort=null;}if(worker){worker.terminate();worker=null;}busy=false;job=null;refresh();parent.postMessage({pluginMessage:{type:'ready'}},'*');}
 function updateSize(){
  const valid=frames.filter(printable);
@@ -124,6 +161,7 @@ function showPaperMatch(match){
  el('size-match-text').textContent='Close to '+match.name+' ('+formatSize(match)+')';el('size-snap').textContent='Use '+match.name;
  el('size-snap').onclick=()=>{dimensions={width:match.width,height:match.height};autoSize=false;for(const id of ['width','height'])el(id).value=displayDimension(dimensions[id]);clearResult();updateSize();};
 }
+el('preflight-toggle').onclick=()=>{checksOpen=!checksOpen;openFrames.clear();renderPreflight();renderFrames();};
 el('export-mode').value='combined';el('export-mode').onchange=()=>{clearResult();refresh();};
 el('units').value='mm';
 el('units').onchange=()=>{clearResult();unit=el('units').value;for(const id of ['width','height']){el(id+'-unit').textContent=unit;el(id).min=unit==='in'?10/25.4:10;el(id).max=unit==='in'?2000/25.4:2000;el(id).step=unit==='in'?'.001':'.01';el(id).value=displayDimension(dimensions[id]);}for(const node of document.querySelectorAll?document.querySelectorAll('.length-unit'):[])node.textContent=unit;showLengths();updateSize();renderFrames();};
@@ -159,6 +197,8 @@ window.onmessage=async event=>{
    // The bleed field follows the selection when its frames share one bleed, so editing it starts from what is on the canvas.
    const shown=[...new Set(frames.map(frameBleed).filter(b=>b))];if(shown.length===1&&shown[0]!==bleedSetting){bleedSetting=shown[0];showLengths();}}
   updateSize();renderFrames();refresh();}
+ // Preflight results replace the last set and are kept per frame, so they can arrive before or after the selection.
+ if(msg.type==='preflight'){checks=new Map((msg.frames||[]).map(f=>[f.id,f]));renderPreflight();renderFrames();}
  if(msg.type==='status')status(msg.text,'busy');
  if(msg.type==='error'){stop();if(Array.isArray(msg.issues)&&msg.issues.length){issues=msg.issues;renderFrames();const layers=new Set(issues.map(i=>i.nodeId)).size;status((layers===1?'1 layer uses':layers+' layers use')+' an unsupported effect, listed under its frame above. Remove the effect or flatten the layer, then export again.','error');}else status(msg.text,'error');}
  if(msg.type==='pdfs' && job){const current=job;try{current.bleeds=(msg.bleeds||[]).map(px=>px*25.4/72);if(current.auto && msg.sizes)current.sizes=msg.sizes.map(size=>PrintCore.frameSize(size.width,size.height));

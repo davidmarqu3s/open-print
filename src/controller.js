@@ -45,7 +45,7 @@ async function describe(n) {
 }
 // Selection changes can overlap while main components load, so only the latest one is posted.
 let selectionId=0;
-async function selection() { const id=++selectionId,frames=await Promise.all(figma.currentPage.selection.map(describe));if(id===selectionId)figma.ui.postMessage({type:'selection',frames}); }
+async function selection() { const id=++selectionId,frames=await Promise.all(figma.currentPage.selection.map(describe));if(id===selectionId){figma.ui.postMessage({type:'selection',frames});await preflight();} }
 // Layers added to a frame land above its trim outline, so the outline moves back on top. Instances follow their main component.
 function keepTrimOnTop(frame) {
  if(!frame||frame.removed||frame.type==='INSTANCE'||!PRINTABLE.includes(frame.type))return;
@@ -53,7 +53,7 @@ function keepTrimOnTop(frame) {
 }
 function watchPage(page) {
  if(!page||typeof page.on!=='function')return;
- page.on('nodechange',event=>{for(const change of event.nodeChanges){const node=change.node;try{if(change.type!=='DELETE'&&node&&!node.removed)keepTrimOnTop(node.parent);}catch(error){/* The layer went away mid-change. */}}});
+ page.on('nodechange',event=>{for(const change of event.nodeChanges){const node=change.node;try{if(change.type!=='DELETE'&&node&&!node.removed)keepTrimOnTop(node.parent);}catch(error){/* The layer went away mid-change. */}}schedulePreflight();});
 }
 watchPage(figma.currentPage);figma.on('currentpagechange',()=>watchPage(figma.currentPage));
 figma.on('selectionchange',()=>{for(const n of figma.currentPage.selection)try{keepTrimOnTop(n.parent);}catch(error){/* Leave the order alone. */}selection();});
@@ -174,6 +174,72 @@ function hideBleed(frame) {
  const trim=trimLayer(frame);if(trim)trim.remove();
  frame.clipsContent=frame.getPluginData(BLEED_KEY+'-clip')!=='false';frame.setPluginData(BLEED_KEY+'-clip','');
 }
+// Preflight walks each selected frame and reports measurements in frame units, 72 to the inch. The window applies the limits, because a typed page size scales the artwork.
+const PREFLIGHT_LIMIT=5000,NEAR_BLACK=0.2;
+const visiblePaint=p=>!!p&&p.visible!==false&&p.opacity!==0;
+const isWhite=p=>p.type==='SOLID'&&p.color.r===1&&p.color.g===1&&p.color.b===1&&(p.opacity===undefined||p.opacity===1);
+// Pure black is exactly #000000, which Pure black as 100% K prints in black ink only. Other very dark colours print in all four inks.
+function blackOf(fills) {
+ const solid=(Array.isArray(fills)?fills:[]).filter(p=>visiblePaint(p)&&p.type==='SOLID');
+ if(solid.some(p=>p.color.r===0&&p.color.g===0&&p.color.b===0))return 'pure';
+ return solid.some(p=>Math.max(p.color.r,p.color.g,p.color.b)<=NEAR_BLACK)?'rich':null;
+}
+// Image pixels per frame unit decide the ppi at print size. Crop and Tile set the scale themselves; Fill covers the layer and Fit sits inside it.
+async function imagePpi(node,fill,sizes) {
+ if(!sizes.has(fill.imageHash)){let size=null;try{const image=figma.getImageByHash(fill.imageHash);size=image?await image.getSizeAsync():null;}catch(error){/* An image that can't load isn't measured. */}sizes.set(fill.imageHash,size);}
+ const size=sizes.get(fill.imageHash);if(!size||!size.width||!size.height||!node.width||!node.height)return Infinity;
+ let units;
+ if(fill.scaleMode==='TILE')units=fill.scalingFactor||1;
+ else if(fill.scaleMode==='CROP'&&fill.imageTransform){const [[a,b],[c,d]]=fill.imageTransform;units=Math.max(node.width/(Math.hypot(a,c)||1)/size.width,node.height/(Math.hypot(b,d)||1)/size.height);}
+ else{const x=node.width/size.width,y=node.height/size.height;units=fill.scaleMode==='FIT'?Math.min(x,y):Math.max(x,y);}
+ return 72/units;
+}
+const strokeWeightOf=node=>typeof node.strokeWeight==='number'?node.strokeWeight:Math.min(...['strokeTopWeight','strokeRightWeight','strokeBottomWeight','strokeLeftWeight'].map(k=>node[k]).filter(w=>w>0));
+function textRuns(node) {
+ try{if(typeof node.getStyledTextSegments==='function')return node.getStyledTextSegments(['fontSize','fills']);}catch(error){/* Fall back to the layer's own style. */}
+ return [{fontSize:node.fontSize,fills:node.fills}];
+}
+async function preflightFrame(frame) {
+ const findings=[],sizes=new Map(),skip=new Set(),box=frame.absoluteBoundingBox,bleed=await bleedOfNode(frame);
+ for(const layer of [await bleedLayerOf(frame),await layerOf(frame,trimLayer)])if(layer)skip.add(layer.id);
+ // Without bleed, a coloured background or artwork reaching the edge leaves a white sliver when the sheet is trimmed.
+ let count=0,edge=!bleed&&Array.isArray(frame.fills)&&frame.fills.some(p=>visiblePaint(p)&&!isWhite(p))?frame:null;
+ const add=(kind,node,extra)=>findings.push({kind,nodeId:node.id,name:node.name,...extra});
+ async function walk(node,rasterised) {
+  if(node.visible===false||skip.has(node.id)||++count>PREFLIGHT_LIMIT)return;
+  const bounds=node.absoluteRenderBounds||node.absoluteBoundingBox,inside=box&&bounds&&bounds.x<box.x+box.width&&bounds.y<box.y+box.height&&bounds.x+bounds.width>box.x&&bounds.y+bounds.height>box.y;
+  if(node!==frame&&!edge&&!bleed&&inside&&(bounds.x<=box.x+0.5||bounds.y<=box.y+0.5||bounds.x+bounds.width>=box.x+box.width-0.5||bounds.y+bounds.height>=box.y+box.height-0.5))edge=node;
+  // A rasterised layer is drawn as one image, so effects inside it are fine.
+  rasterised=rasterised||hasRaster(node);
+  if(!rasterised&&(node.effects||[]).some(e=>e.visible!==false&&!EFFECTS.includes(e.type)))add('effect',node);
+  let ppi=Infinity;for(const fill of Array.isArray(node.fills)?node.fills:[])if(visiblePaint(fill)&&fill.type==='IMAGE'&&fill.imageHash)ppi=Math.min(ppi,await imagePpi(node,fill,sizes));
+  if(ppi<Infinity)add('image',node,{ppi:Math.round(ppi)});
+  if(Array.isArray(node.strokes)&&node.strokes.some(visiblePaint)){const weight=strokeWeightOf(node);if(weight>0&&weight<4)add('stroke',node,{weight});}
+  if(node.type==='TEXT'){
+   let size=Infinity,rich=Infinity,pure=Infinity;
+   for(const run of textRuns(node)){if(typeof run.fontSize!=='number')continue;size=Math.min(size,run.fontSize);const black=blackOf(run.fills);if(black==='rich')rich=Math.min(rich,run.fontSize);if(black==='pure')pure=Math.min(pure,run.fontSize);}
+   // How close the text comes to the trim. Text crossing the edge counts as touching it.
+   const gap=inside?Math.max(0,Math.min(bounds.x-box.x,bounds.y-box.y,box.x+box.width-bounds.x-bounds.width,box.y+box.height-bounds.y-bounds.height)):null;
+   add('text',node,{size:size<Infinity?size:null,rich:rich<Infinity?rich:null,pure:pure<Infinity?pure:null,gap});
+  }
+  for(const child of node.children||[])await walk(child,rasterised);
+ }
+ await walk(frame,false);
+ if(edge)add('bleed',edge);
+ return {id:frame.id,bleed,findings,partial:count>PREFLIGHT_LIMIT};
+}
+// Only the latest run posts, and runs pause while an export is copying frames.
+let preflightId=0,preflightTimer=null,exporting=0;
+async function preflight() {
+ const id=++preflightId,frames=[];
+ for(const node of figma.currentPage.selection){if(!PRINTABLE.includes(node.type))continue;try{frames.push(await preflightFrame(node));}catch(error){/* The frame changed mid-check; the next change runs it again. */}if(id!==preflightId)return;}
+ figma.ui.postMessage({type:'preflight',frames});
+}
+// Edits re-run preflight once they settle.
+function schedulePreflight() {
+ if(exporting)return;clearTimeout(preflightTimer);
+ preflightTimer=setTimeout(()=>{if(!exporting&&figma.currentPage.selection.length)preflight();},500);
+}
 async function runExport(ids,id,prints) {
  const current=()=>id===exportId;
  try {
@@ -208,5 +274,5 @@ figma.ui.onmessage=async msg=>{
  }
  if(msg.type!=='export')return;
  // Exports run one at a time. Cancel bumps exportId so a running export stops posting, and a new one waits its turn.
- const id=++exportId;exportRun=exportRun.then(()=>runExport(msg.ids,id,msg.prints));await exportRun;
+ const id=++exportId;exportRun=exportRun.then(async()=>{exporting++;try{await runExport(msg.ids,id,msg.prints);}finally{exporting--;}});await exportRun;
 };

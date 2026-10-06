@@ -14,7 +14,7 @@ function controller(frames){
  for(const f of frames)page.appendChild(f);
  const figma={showUI(){},on(){},currentPage:Object.assign(page,{selection:frames}),getNodeByIdAsync:async id=>frames.find(f=>f.id===id),ui:{postMessage:m=>messages.push(m)},
   createRectangle:()=>node({type:'RECTANGLE'}),createFrame:()=>node({type:'FRAME',fills:[{type:'SOLID'}],exportAsync:async function(){log.exported.push(this);return new Uint8Array([3]);}})};
- const context={figma,__html__:'',Set,setTimeout};vm.createContext(context);vm.runInContext(fs.readFileSync('src/controller.js','utf8'),context);return {figma,messages,log,page};
+ const context={figma,__html__:'',Set,setTimeout,clearTimeout};vm.createContext(context);vm.runInContext(fs.readFileSync('src/controller.js','utf8'),context);return {figma,messages,log,page};
 }
 const plain=v=>JSON.parse(JSON.stringify(v));
 const RED={type:'SOLID',color:{r:1,g:0,b:0}};
@@ -34,7 +34,7 @@ test('show bleed moves the background onto a locked layer around the frame and t
  assert.deepEqual(plain(layer.fills),[RED]);assert.deepEqual(plain(frame.fills),[]);assert.equal(frame.clipsContent,false);assert.equal(layer.locked,true);
  assert.deepEqual(plain(layer.dashPattern),[4,4]);assert.equal(layer.strokes.length,1);
  assert.deepEqual(plain(layer.constraints),{horizontal:'STRETCH',vertical:'STRETCH'});
- assert.equal(messages.at(-1).type,'selection');assert.equal(messages.at(-1).frames[0].bleed,8.5);
+ assert.equal(messages.findLast(m=>m.type==='selection').frames[0].bleed,8.5);
  // A second Show bleed resizes the same layer and keeps one trim outline.
  await figma.ui.onmessage({type:'show-bleed',ids:['1'],bleed:14.17});
  assert.equal(frame.children.filter(c=>c.name==='Bleed').length,1);assert.equal(frame.children.filter(c=>c.name==='Trim').length,1);assert.equal(frame.children[0].x,-14);assert.deepEqual(plain(frame.children[0].fills),[RED]);
@@ -54,7 +54,7 @@ test('a frame given bleed before the trim outline existed gets one when bleed is
 });
 test('bleed shows on the canvas rounded to the nearest whole pixel, at least 1, and keeps its exact amount',async()=>{
  const {frame}=poster(),{figma,messages}=controller([frame]);
- await figma.ui.onmessage({type:'show-bleed',ids:['1'],bleed:3*72/25.4});assert.equal(frame.children[0].x,-9);assert(Math.abs(messages.at(-1).frames[0].bleed-3*72/25.4)<1e-3);
+ await figma.ui.onmessage({type:'show-bleed',ids:['1'],bleed:3*72/25.4});assert.equal(frame.children[0].x,-9);assert(Math.abs(messages.findLast(m=>m.type==='selection').frames[0].bleed-3*72/25.4)<1e-3);
  await figma.ui.onmessage({type:'show-bleed',ids:['1'],bleed:12});assert.equal(frame.children[0].x,-12);
  await figma.ui.onmessage({type:'show-bleed',ids:['1'],bleed:8.4});assert.equal(frame.children[0].x,-8);
  await figma.ui.onmessage({type:'show-bleed',ids:['1'],bleed:0.2});assert.equal(frame.children[0].x,-1);
@@ -71,7 +71,7 @@ test('hide bleed puts the background back, removes the layer and restores clippi
  await figma.ui.onmessage({type:'show-bleed',ids:['1'],bleed:8.5});
  const BLUE={type:'SOLID',color:{r:0,g:0,b:1}};frame.children[0].fills=[BLUE];
  await figma.ui.onmessage({type:'hide-bleed',ids:['1']});
- assert.deepEqual(plain(frame.fills),[BLUE]);assert.equal(frame.children.length,1);assert.equal(frame.children[0].name,'Photo');assert.equal(frame.clipsContent,true);assert.equal(messages.at(-1).frames[0].bleed,0);
+ assert.deepEqual(plain(frame.fills),[BLUE]);assert.equal(frame.children.length,1);assert.equal(frame.children[0].name,'Photo');assert.equal(frame.clipsContent,true);assert.equal(messages.findLast(m=>m.type==='selection').frames[0].bleed,0);
 });
 test('a frame that did not clip keeps not clipping after hide bleed',async()=>{
  const {frame}=poster();frame.clipsContent=false;const {figma}=controller([frame]);
@@ -114,7 +114,7 @@ test('a component takes bleed like a frame, and its instances show and export it
  // Show bleed leaves the instance alone; it follows the main component.
  instance.children=instanceOf(component,'2',700,900).children;
  await figma.ui.onmessage({type:'ready'});
- const sent=messages.at(-1).frames;assert.equal(sent[0].bleed,8.5);assert.equal(sent[1].bleed,8.5);assert.equal(sent[1].mainId,'1');
+ const sent=messages.findLast(m=>m.type==='selection').frames;assert.equal(sent[0].bleed,8.5);assert.equal(sent[1].bleed,8.5);assert.equal(sent[1].mainId,'1');
  await figma.ui.onmessage({type:'export',ids:['2']});
  const msg=messages.at(-1);assert.equal(msg.type,'pdfs',msg.text);assert.deepEqual([...msg.bleeds],[8.5]);
  const wrapper=log.exported[0];assert.deepEqual([wrapper.width,wrapper.height],[717,917]);assert.deepEqual(plain(wrapper.children[0].children[0].strokes),[]);
