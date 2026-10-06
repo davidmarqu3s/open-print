@@ -24,6 +24,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+      # The render tests draw finished PDFs with poppler's pdftoppm, as a viewer would.
+      - run: sudo apt-get update && sudo apt-get install -y poppler-utils
       - run: npm run build
       - run: npm test
       - run: scripts/package-release.sh latest
