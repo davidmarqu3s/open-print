@@ -91,6 +91,8 @@ footer{flex:none;border-top:1px solid var(--border)}
 /* Export as is a setting, so a line separates it from the status and button below. */
 .option{display:flex;align-items:center;justify-content:space-between;height:40px;padding:0 16px;border-bottom:1px solid var(--border)}
 .option label{color:var(--text2)}
+#resize-grip{position:fixed;right:0;bottom:0;z-index:5;width:20px;height:20px;padding:2px;color:var(--icon2);cursor:ns-resize;touch-action:none}
+#resize-grip:hover{color:var(--text)}
 #status,#export-hint{display:flex;align-items:flex-start;gap:6px;white-space:pre-line;overflow-wrap:anywhere;color:var(--text2)}
 #status:empty,#export-hint:empty{display:none}
 #status.error{color:var(--danger)}
@@ -129,5 +131,5 @@ footer{flex:none;border-top:1px solid var(--border)}
 <label class="check" title="The print standard most printers ask for. Needs a color profile."><input id="pdfx" type="checkbox" checked><span>PDF/X-4</span></label>
 <p class="hint" id="pdfx-hint"></p></section>
 </main>
-<footer><div class="option" id="export-options" hidden><label for="export-mode">Export as</label><select id="export-mode" class="compact" aria-label="Export as"><option value="combined">One multipage PDF</option><option value="separate">Individual PDFs</option></select></div><div class="send"><div id="status" role="status"></div><div id="export-hint"></div><div class="actions"><button id="cancel" class="secondary" hidden>Cancel</button><button id="export" class="primary" disabled>Export CMYK PDF</button></div></div></footer>
+<footer><div class="option" id="export-options" hidden><label for="export-mode">Export as</label><select id="export-mode" class="compact" aria-label="Export as"><option value="combined">One multipage PDF</option><option value="separate">Individual PDFs</option></select></div><div class="send"><div id="status" role="status"></div><div id="export-hint"></div><div class="actions"><button id="cancel" class="secondary" hidden>Cancel</button><button id="export" class="primary" disabled>Export CMYK PDF</button></div></div></footer><svg id="resize-grip" viewBox="0 0 16 16" fill="none" stroke="currentColor" aria-hidden="true"><path d="M12.5 7.5l-5 5M12.5 10.5l-2 2"/></svg>
 <script>/*BUNDLE*/</script></body></html>
