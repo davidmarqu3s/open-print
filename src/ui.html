@@ -5,7 +5,7 @@ html.figma-dark{color-scheme:dark}
 html,body{height:100%}
 body{margin:0;display:flex;flex-direction:column;font:450 11px/16px Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;letter-spacing:.005em;background:var(--bg);color:var(--text);-webkit-font-smoothing:antialiased}
 main{flex:1;overflow-y:auto}
-section{padding:4px 16px 12px}
+section{padding:8px 16px 16px}
 section+section{border-top:1px solid var(--border)}
 .head{display:flex;align-items:center;justify-content:space-between;height:32px}
 /* Figma UI3 type: 11/16 Inter, 450 for body text and 550 for titles and buttons. */
@@ -48,11 +48,11 @@ input[type=number]{-moz-appearance:textfield}input::-webkit-outer-spin-button,in
 .dims{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px}
 .check.below{margin-top:8px}
 .link.reset{display:block;margin-top:8px}
-.labelled{display:flex;flex-direction:column;gap:2px;min-width:0}
-.field-label{font-size:10px;line-height:12px;color:var(--text2)}
+.labelled{display:flex;flex-direction:column;gap:4px;min-width:0}
+.field-label{font-size:10px;line-height:16px;color:var(--text2)}
 .field.plain input{padding-left:8px}
 /* Bleed and Crop marks are added and removed from their headers, like Figma's Effects section; settings show once added. */
-section.collapsed{padding-bottom:4px}
+section.collapsed{padding-bottom:8px}
 .icon{width:24px;height:24px;margin-right:-6px;padding:0;background:none;color:var(--icon2)}
 .icon:hover:not(:disabled){background:var(--bg-hover);color:var(--text)}
 .icon:disabled{opacity:.4}
