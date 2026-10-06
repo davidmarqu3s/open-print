@@ -1,7 +1,15 @@
 var PrintCore = {
+ // Standard sizes in mm, portrait. Frames drawn at 72 units per inch land a fraction of a millimetre off them.
+ PAPER:[['A0',841,1189],['A1',594,841],['A2',420,594],['A3',297,420],['A4',210,297],['A5',148,210],['A6',105,148],['DL',99,210],['B1',707,1000],['B2',500,707],['B3',353,500],['B4',250,353],['B5',176,250],['SRA3',320,450],['50 × 70 cm poster',500,700],['70 × 100 cm poster',700,1000],['Letter',215.9,279.4],['Legal',215.9,355.6],['Tabloid',279.4,431.8],['Business card',85,55],['US business card',88.9,50.8]],
+ // A frame at a paper size rounded to whole pixels, like Figma's presets (A4 is 595 × 842), prints at that paper size exactly.
  frameSize(width,height) {
   if(!Number.isFinite(width)||!Number.isFinite(height)||width<=0||height<=0)throw new Error('Invalid frame dimensions.');
-  return {width:Math.round(width*25.4/72*100)/100,height:Math.round(height*25.4/72*100)/100};
+  return this.paperSize(width,height)||{width:Math.round(width*25.4/72*100)/100,height:Math.round(height*25.4/72*100)/100};
+ },
+ paperSize(width,height) {
+  const px=mm=>Math.round(mm*72/25.4),same=(a,b)=>Math.abs(a-b)<0.01;
+  for(const [,w,h] of this.PAPER)for(const [a,b] of [[w,h],[h,w]])if(same(width,px(a))&&same(height,px(b)))return {width:a,height:b};
+  return null;
  },
  points(mm) { if (!Number.isFinite(mm) || mm < 10 || mm > 2000) throw new Error('Page size must be between 10 and 2000 mm.'); return mm * 72 / 25.4; },
  validateICC(bytes) {
@@ -320,8 +328,11 @@ var PrintCore = {
    const fit=options.fits&&options.fits[i]||null,scale=fit?fit.scale:1,bleedMm=this.scaledBleed(canvasBleed,scale);
    const problem=this.marksProblem(marks,bleedMm);if(problem)throw new Error(problem);
    const b=pt(bleedMm),m=pt(this.margin(bleedMm,marks)),old=page.getHeight(),cb=pt(canvasBleed*scale),dx=fit?pt(fit.dx):0,dy=fit?pt(fit.dy):0;
+   // A whole-pixel paper-size frame prints at the exact paper size, so its artwork stretches by a fraction of a point to fill the trim.
+   const sx=(w-2*dx)/(page.getWidth()-2*cb),sy=(h-2*dy)/(old-2*cb),stretch=Math.abs(sx-1)*(w-2*dx)>0.02||Math.abs(sy-1)*(h-2*dy)>0.02;
+   if(stretch)page.scaleContent(sx,sy);
    // The exported page is the frame plus its bleed. Its top left goes to the bleed corner, so the trim lands on the TrimBox.
-   page.translateContent(m+dx-cb,h+m-dy+cb-old);
+   page.translateContent(m+dx-(stretch?sx:1)*cb,h+m-dy-(stretch?sy:1)*(old-cb));
    // Scaled artwork is clipped to its own trim plus the bleed, inside the BleedBox, so surplus bleed never shows in white space or under the marks.
    // The clip streams must be registered: a stream written inline in /Contents makes the whole file unreadable.
    if(fit){const aw=w-2*dx,ah=h-2*dy,x0=Math.max(m-b,m+dx-b),y0=Math.max(m-b,m+dy-b),x1=Math.min(m+w+b,m+dx+aw+b),y1=Math.min(m+h+b,m+dy+ah+b);const ref=stream=>doc.context.register(stream);page.node.wrapContentStreams(ref(page.createContentStream(PDFLib.pushGraphicsState(),PDFLib.rectangle(x0,y0,x1-x0,y1-y0),PDFLib.clip(),PDFLib.endPath())),ref(page.createContentStream(PDFLib.popGraphicsState())));}
