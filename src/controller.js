@@ -1,8 +1,8 @@
 figma.showUI(__html__, {width:320,height:560,themeColors:true});
 // New frame creates a paper-size frame at 72 units per inch, the scale the export uses, in the middle of the view.
-const PAPER_FRAMES={A0:[841,1189],A1:[594,841],A2:[420,594],A3:[297,420],A4:[210,297],A5:[148,210],A6:[105,148]};
+const PAPER_FRAMES={'A0':[841,1189],'A1':[594,841],'A2':[420,594],'A3':[297,420],'A4':[210,297],'A5':[148,210],'A6':[105,148],'DL':[99,210],'Business card':[85,55],'50 × 70 cm poster':[500,700],'70 × 100 cm poster':[700,1000],'Letter':[215.9,279.4],'Tabloid':[279.4,431.8]};
 function newPaperFrame(name) {
- const mm=PAPER_FRAMES[name];if(!mm)return;
+ const mm=Object.prototype.hasOwnProperty.call(PAPER_FRAMES,name)?PAPER_FRAMES[name]:null;if(!mm)return;
  const [width,height]=mm.map(v=>Math.round(v*72/25.4*100)/100),view=figma.viewport.bounds,frame=figma.createFrame();
  frame.name=name;frame.resize(width,height);frame.x=Math.round(figma.viewport.center.x-width/2);frame.y=Math.round(figma.viewport.center.y-height/2);
  figma.currentPage.selection=[frame];
