@@ -3,12 +3,13 @@
 html.figma-dark{color-scheme:dark}
 *{box-sizing:border-box}
 html,body{height:100%}
-body{margin:0;display:flex;flex-direction:column;font:11px/16px Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;letter-spacing:.005em;background:var(--bg);color:var(--text);-webkit-font-smoothing:antialiased}
+body{margin:0;display:flex;flex-direction:column;font:450 11px/16px Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;letter-spacing:.005em;background:var(--bg);color:var(--text);-webkit-font-smoothing:antialiased}
 main{flex:1;overflow-y:auto}
-section{padding:4px 16px 12px}
+section{padding:8px 16px 16px}
 section+section{border-top:1px solid var(--border)}
 .head{display:flex;align-items:center;justify-content:space-between;height:32px}
-h2{margin:0;font-size:11px;font-weight:600}
+/* Figma UI3 type: 11/16 Inter, 450 for body text and 550 for titles and buttons. */
+h2{margin:0;font-size:11px;font-weight:550}
 .meta{color:var(--text2)}
 .hint{margin:8px 0 0;color:var(--text2)}
 .hint:empty,[hidden]{display:none!important}
@@ -25,13 +26,14 @@ li .name .end{flex:none;white-space:pre}
 ol.expanded{max-height:none}
 li .size{flex:none;color:var(--text2);font-variant-numeric:tabular-nums}
 li.invalid,li.invalid svg,li.invalid .size{color:var(--warning)}
-li.empty{height:auto;padding:12px 8px;color:var(--text2)}
+/* A normal 32px row, left-aligned with the Frames heading, so selecting a frame doesn't move anything. */
+li.empty{color:var(--text2)}
 li.empty:hover{background:none}
 li.issue{height:24px;padding-left:32px;color:var(--danger)}
 li.issue:hover{background:none}
 li.issue .name{color:var(--danger)}
 li.issue.more{color:var(--text2)}
-.link{height:auto;padding:0;background:none;color:var(--figma-color-text-brand,#007be5);font-weight:500}
+.link{height:auto;padding:0;background:none;color:var(--figma-color-text-brand,#007be5);font-weight:550}
 .link:hover{text-decoration:underline}
 input,select,button{font:inherit;letter-spacing:inherit;color:inherit}
 .field{position:relative;display:flex;align-items:center;height:24px;border:1px solid transparent;border-radius:5px;background:var(--bg2)}
@@ -46,14 +48,19 @@ input[type=number]{-moz-appearance:textfield}input::-webkit-outer-spin-button,in
 .dims{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px}
 .check.below{margin-top:8px}
 .link.reset{display:block;margin-top:8px}
-.bleed-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:end}
 .labelled{display:flex;flex-direction:column;gap:4px;min-width:0}
-.field-label{color:var(--text2)}
+.field-label{font-size:10px;line-height:16px;color:var(--text2)}
 .field.plain input{padding-left:8px}
-.bleed-row button{height:24px;padding:0 8px;font-weight:400}
-.trio{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:8px}
+/* Bleed and Crop marks are added and removed from their headers, like Figma's Effects section; settings show once added. */
+section.collapsed{padding-bottom:8px}
+.icon{width:24px;height:24px;margin-right:-6px;padding:0;background:none;color:var(--icon2)}
+.icon:hover:not(:disabled){background:var(--bg-hover);color:var(--text)}
+.icon:disabled{opacity:.4}
+/* The whole header row toggles, as in Figma, so hovering it lights up the button. */
+.head.toggle:hover .icon:not(:disabled){background:var(--bg-hover);color:var(--text)}
+.trio{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
 select.native{display:none}
-select,.select{appearance:none;-webkit-appearance:none;display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;height:24px;padding:0 8px;border:1px solid transparent;border-radius:5px;background:var(--bg2);font-weight:400;text-align:left;cursor:default}
+select,.select{appearance:none;-webkit-appearance:none;display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;height:24px;padding:0 8px;border:1px solid transparent;border-radius:5px;background:var(--bg2);font-weight:450;text-align:left;cursor:default}
 .select-label{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .select svg{flex:none;color:var(--icon2)}
 .select:hover:not(:disabled){border-color:var(--border)}
@@ -71,7 +78,7 @@ select,.select{appearance:none;-webkit-appearance:none;display:flex;align-items:
 .check input{appearance:none;-webkit-appearance:none;flex:none;width:12px;height:12px;margin:0;border:1px solid var(--text);border-radius:2px;background:none;display:grid;place-content:center}
 .check input:checked{border-color:var(--brand);background:var(--brand) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='6' fill='none' stroke='white' stroke-width='1.5'%3E%3Cpath d='M.75 3 3 5.25 7.25.75'/%3E%3C/svg%3E") no-repeat center}
 .check input:focus-visible{outline:2px solid var(--selected);outline-offset:1px}
-button,.button{display:inline-flex;align-items:center;justify-content:center;height:32px;padding:0 12px;border:0;border-radius:5px;font-weight:500;cursor:default;white-space:nowrap;text-decoration:none}
+button,.button{display:inline-flex;align-items:center;justify-content:center;height:32px;padding:0 12px;border:0;border-radius:5px;font-weight:550;cursor:default;white-space:nowrap;text-decoration:none}
 .primary{background:var(--brand);color:var(--onbrand)}
 .primary:hover:not(:disabled){background:var(--brand-hover)}
 .primary:disabled{background:var(--disabled);color:var(--ondisabled)}
@@ -103,7 +110,7 @@ footer{flex:none;border-top:1px solid var(--border)}
 #status.done:has(.note){flex-wrap:wrap}
 #status .note{flex-basis:100%;color:var(--warning)}
 #status.busy::before{content:"";flex:none;width:12px;height:12px;margin-top:2px;border:1.5px solid var(--border);border-top-color:var(--brand);border-radius:50%;animation:spin .8s linear infinite}
-#status a{margin-left:auto;color:var(--figma-color-text-brand,#007be5);font-weight:500;text-decoration:none}
+#status a{margin-left:auto;color:var(--figma-color-text-brand,#007be5);font-weight:550;text-decoration:none}
 #status a:hover{text-decoration:underline}
 .downloads{display:flex;flex:1;min-width:0;flex-direction:column;gap:4px}
 #status .downloads a{margin-left:0;overflow-wrap:anywhere}
@@ -114,13 +121,13 @@ footer{flex:none;border-top:1px solid var(--border)}
 <section><div class="head"><h2>Page size</h2><select id="units" class="compact" aria-label="Units"><option value="mm">mm</option><option value="in">in</option></select></div>
 <div class="dims"><label class="field" id="width-field" title="Width"><span class="prefix" aria-hidden="true">W</span><input id="width" type="number" min="10" max="2000" step=".01" aria-label="Width"><span class="suffix" id="width-unit">mm</span></label><label class="field" id="height-field" title="Height"><span class="prefix" aria-hidden="true">H</span><input id="height" type="number" min="10" max="2000" step=".01" aria-label="Height"><span class="suffix" id="height-unit">mm</span></label></div>
 <p class="hint error" id="size-error"></p>
-<p class="hint" id="size-hint">Select frames to infer their print size.</p>
+<p class="hint" id="size-hint">Select frames to calculate their print size.</p>
 <button id="size-reset" class="link reset" hidden>Reset to frame size</button>
 <div class="match" id="size-match" hidden><span id="size-match-text"></span><button id="size-snap" class="link"></button></div></section>
-<section><div class="head"><h2>Bleed and marks</h2></div>
-<div class="bleed-row"><div class="labelled"><label class="field-label" for="bleed">Bleed</label><label class="field plain" id="bleed-field" title="Bleed on each side"><input id="bleed" type="number" min="0" max="20" step=".5"><span class="suffix length-unit">mm</span></label></div><button id="bleed-toggle" class="secondary">Add bleed</button></div>
-<p class="hint" id="bleed-hint"></p>
-<label class="check below"><input id="marks" type="checkbox"><span>Crop marks</span></label>
+<section id="bleed-section" class="collapsed"><div class="head toggle" id="bleed-head"><h2>Bleed</h2><button id="bleed-toggle" class="icon"></button></div>
+<div id="bleed-options" hidden><label class="field plain" id="bleed-field" title="Bleed on each side"><input id="bleed" aria-label="Bleed on each side" type="number" min="0" max="20" step=".5"><span class="suffix length-unit">mm</span></label></div>
+<p class="hint" id="bleed-hint"></p></section>
+<section id="marks-section" class="collapsed"><div class="head toggle" id="marks-head"><h2>Crop marks</h2><button id="marks-toggle" class="icon"></button></div>
 <div id="marks-options" hidden><div class="trio"><div class="labelled"><label class="field-label" for="mark-offset">Offset</label><label class="field plain" id="mark-offset-field" title="Distance from the trim to the start of each mark"><input id="mark-offset" type="number" min="0" max="20" step=".5"><span class="suffix length-unit">mm</span></label></div><div class="labelled"><label class="field-label" for="mark-length">Length</label><label class="field plain" id="mark-length-field" title="Length of each mark"><input id="mark-length" type="number" min="2" max="20" step=".5"><span class="suffix length-unit">mm</span></label></div><div class="labelled"><label class="field-label" for="mark-weight">Thickness</label><label class="field plain" id="mark-weight-field" title="Line thickness of the marks"><input id="mark-weight" type="number" min=".1" max="2" step=".05"><span class="suffix">pt</span></label></div></div>
 <p class="hint error" id="marks-error"></p></div>
 <p class="hint" id="sheet-hint"></p></section>

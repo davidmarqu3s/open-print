@@ -20,13 +20,13 @@ The profile controls the conversion and is embedded in the PDF. With **No profil
 
 ## Page size
 
-Figma frames have no physical size, so the plugin uses Figma’s PDF scale of 72 frame units per inch. A 907 × 1276 frame becomes 319.97 × 450.14 mm. When a frame is within 0.5 mm of a standard size, such as A3 or Letter, a **Use A3**-style button enters the exact size. A typed size applies to every page. Artwork stays at its native size, aligned top left, so a larger page adds space and a smaller one crops.
+Figma frames have no physical size, so the plugin uses Figma’s PDF scale of 72 frame units per inch. A 907 × 1276 frame becomes 319.97 × 450.14 mm. When a frame is within 0.5 mm of a standard size, such as A3 or Letter, a **Use A3**-style button enters the exact size. A typed size applies to every page, and each frame’s artwork scales to fit it, centred. Vectors stay sharp; noise, textures and other effects are rendered for the printed size, and the low-resolution warning allows for the scale. Scaling down also shrinks the bleed, so if less than 3 mm would be left, export waits until you click **Use … bleed** to enlarge it on the canvas.
 
 ## Bleed and crop marks
 
-Enter a bleed (3 mm by default) and click **Add bleed**. Each frame gets a locked **Bleed** layer holding its background, and **Clip content** is turned off, so you can drag images past the edge and see exactly what will print. Change the amount and press Return to resize it. **Remove bleed** puts everything back. The frame is always the trim size.
+Click **+** next to **Bleed** to add 3 mm of bleed. Each frame gets a locked **Bleed** layer holding its background, and **Clip content** is turned off, so you can drag images past the edge and see exactly what will print. The amount then appears: change it and press Return to resize the bleed. Click **−** to remove it and put everything back. The frame is always the trim size.
 
-Tick **Crop marks** to add Registration marks outside the bleed, with your own offset, length and thickness. The PDF’s TrimBox, BleedBox and MediaBox are set to match.
+Click **+** next to **Crop marks** to add Registration marks outside the bleed, with your own offset, length and thickness. The PDF’s TrimBox, BleedBox and MediaBox are set to match.
 
 ## What’s supported
 
@@ -41,7 +41,7 @@ Tick **Crop marks** to add Registration marks outside the bleed, with your own o
 - **PDF/X-4** is on by default when a profile is chosen: the file is PDF 1.6 with the profile as its output intent, trim and bleed boxes, and the PDF/X-4 metadata printers check for.
 - **Not supported yet:** PDF/X-1a, spot colours, and overprint other than pure black.
 
-Exporting never changes your Figma layers. Only **Add bleed** edits the file.
+Exporting never changes your Figma layers. Only adding bleed edits the file.
 
 ## Privacy and network
 
