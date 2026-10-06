@@ -109,6 +109,8 @@ el('mark-offset').oninput=()=>{marks.offset=readLength('mark-offset');clearResul
 el('mark-length').oninput=()=>{marks.length=readLength('mark-length');clearResult();refresh();};
 el('mark-weight').oninput=()=>{marks.weight=el('mark-weight').value===''?NaN:Number(el('mark-weight').value);clearResult();refresh();};
 el('marks-toggle').onclick=()=>{marksEnabled=!marksEnabled;clearResult();refresh();};
+// Clicking anywhere on a header row does what its button does.
+for(const [head,button] of [['bleed-head','bleed-toggle'],['marks-head','marks-toggle']])el(head).onclick=event=>{if(event&&event.target&&event.target.closest&&event.target.closest('button'))return;if(!el(button).disabled)el(button).onclick();};
 el('pdfx').onchange=el('pure-black').onchange=()=>{clearResult();refresh();};
 const frameIds=()=>frames.filter(f=>f.type==='FRAME').map(f=>f.id),allBleed=()=>{const valid=frames.filter(f=>f.type==='FRAME');return valid.length>0&&valid.every(frameBleed);};
 const addBleed=()=>{if(bleedProblem())return;parent.postMessage({pluginMessage:{type:'show-bleed',ids:frameIds(),bleed:bleedSetting*72/25.4}},'*');};
