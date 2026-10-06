@@ -124,7 +124,10 @@ footer{flex:none;border-top:1px solid var(--border)}
 <p class="hint" id="sheet-hint"></p></section>
 <section><div class="head"><h2>Color profile</h2></div><select id="profile-mode" aria-label="Color profile"><option value="none">No profile</option><option value="custom">Custom CMYK profile…</option></select>
 <div id="custom-profile" hidden><label class="button secondary file"><input id="profile" type="file" accept=".icc,.icm"><span>Import ICC file…</span></label></div>
-<p class="hint" id="profile-hint"></p></section>
+<p class="hint" id="profile-hint"></p>
+<label class="check below" title="Pure black (#000000) text and shapes print in black ink only and overprint, like InDesign’s [Black], so small type stays sharp. Use a near-black such as #0A0A0A for rich black."><input id="pure-black" type="checkbox" checked><span>Pure black as 100% K</span></label>
+<label class="check" title="The print standard most printers ask for. Needs a color profile."><input id="pdfx" type="checkbox" checked><span>PDF/X-4</span></label>
+<p class="hint" id="pdfx-hint"></p></section>
 </main>
 <footer><div class="option" id="export-options" hidden><label for="export-mode">Export as</label><select id="export-mode" class="compact" aria-label="Export as"><option value="combined">One multipage PDF</option><option value="separate">Individual PDFs</option></select></div><div class="send"><div id="status" role="status"></div><div id="export-hint"></div><div class="actions"><button id="cancel" class="secondary" hidden>Cancel</button><button id="export" class="primary" disabled>Export CMYK PDF</button></div></div></footer>
 <script>/*BUNDLE*/</script></body></html>
