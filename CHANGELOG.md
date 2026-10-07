@@ -4,24 +4,15 @@ Notable changes to Open Print. Each release’s notes are also used on GitHub Re
 
 ## Unreleased
 
-- Pure black prints in black ink only and overprints.
-- PDF/X-4 export.
-- Bleed and crop marks are added with a + button, and their settings show once added.
-- A custom page size scales the artwork to fit, centred, instead of cropping it.
-- Components and instances can be exported, with bleed and crop marks. Instances take their bleed from the main component.
-- A + button next to Frames creates frames at exact paper sizes: A0 to A6, DL, business card, posters, Letter and Tabloid. With frames selected, it resizes them instead, keeping each one landscape or portrait.
-- Adding bleed outlines the original frame edge on the canvas. The outline doesn’t print.
-- Frames at a standard size rounded to whole pixels, like Figma’s A4 (595 × 842), show and export at the exact paper size (210 × 297 mm).
-- Bleed sits on whole pixels on the canvas (3 mm shows as 9 px), and the PDF still gets exactly 3 mm.
-- Preflight checks the selected frames as you work, like InDesign’s: low-resolution images, missing bleed, text near the edge, small or rich-black text and hairlines.
+First public release, waiting for Figma Community approval.
 
-## 0.1.0 – 2026-10-06
-
-First public release.
-
-- Export Figma frames as print-ready vector CMYK PDFs, converted inside the plugin.
+- Export Figma frames and components as print-ready vector CMYK PDFs, converted inside the plugin.
 - 15 included CMYK profiles, or your own ICC profile.
+- PDF/X-4 export.
 - One multipage PDF, or one PDF per frame.
-- Print sizes in mm or inches, with snapping to standard paper sizes.
-- Bleed on the canvas and optional crop marks.
+- Print sizes in mm or inches, with snapping to standard paper sizes. A custom page size scales the artwork to fit, centred.
+- New frames at exact paper sizes: A0 to A6, DL, business card, posters, Letter and Tabloid.
+- Bleed on the canvas, with the trim edge outlined, and optional crop marks. Instances take their bleed from the main component.
+- Pure black prints in black ink only and overprints.
 - Gradients stay vector; shadows, blurs and textures export at print resolution.
+- Preflight checks the selected frames as you work: low-resolution images, missing bleed, text near the edge, small or rich-black text and hairlines.
