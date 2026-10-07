@@ -39,7 +39,7 @@ jobs:
         run: |
           short=$(git rev-parse --short HEAD)
           title="Latest build ($short)"
-          notes="Built automatically from main at ${GITHUB_SHA}. Not a versioned release: it changes with every merge and hasn't been reviewed for Figma Community. For a stable version, use the [latest release](https://github.com/${GITHUB_REPOSITORY}/releases/latest)."
+          notes="Built automatically from main at ${GITHUB_SHA}. Not a versioned release: it changes with every merge and hasn't been reviewed for Figma Community. For a stable version, install Open Print from [Figma Community](https://www.figma.com/community/plugin/1688920299289399456)."
           if gh release view latest-build >/dev/null 2>&1; then
             gh release edit latest-build --prerelease --latest=false --title "$title" --notes "$notes"
           else
