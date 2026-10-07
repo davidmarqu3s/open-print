@@ -24,6 +24,8 @@ jobs:
           version=$(node -p "require('./package.json').version")
           test "${{ github.event.release.tag_name }}" = "v$version" || { echo "Tag ${{ github.event.release.tag_name }} doesn't match package.json version $version"; exit 1; }
           echo "VERSION=$version" >> "$GITHUB_ENV"
+      # The render tests draw finished PDFs with poppler's pdftoppm, as a viewer would.
+      - run: sudo apt-get update && sudo apt-get install -y poppler-utils
       - run: npm run build
       - run: npm test
       - run: scripts/package-release.sh "$VERSION"
