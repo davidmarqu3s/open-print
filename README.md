@@ -1,19 +1,30 @@
-# Open Print
+<div align="center">
+  <h1>Open Print</h1>
+  <p><em>Export Figma frames as print-ready CMYK PDFs, right inside Figma.</em></p>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-AGPL_v3-blue.svg?style=flat-square" alt="License"></a>
+</div>
+
+<br/>
 
 ![Open Print converts RGB Figma artwork into a print-ready CMYK PDF](docs/images/open-print-thumbnail.png)
 
-Open Print is an open-source Figma plugin that exports selected frames and components as vector CMYK PDFs. Conversion runs inside the plugin, so you don’t need a server or companion app.
+## Features
+
+- **Vector CMYK PDFs**: vectors and text stay sharp, colour is converted with your printer’s profile, and no RGB is left in the file.
+- **Print sizes built in**: create frames at A0 to A6, DL, business card, 50 × 70 and 70 × 100 cm posters, Letter or Tabloid, already at the right Figma size.
+- **Bleed and crop marks**: add 3 mm bleed and registration marks in one click, with trim and bleed boxes set in the PDF.
+- **Private by design**: conversion runs inside the plugin. No server, no uploads, no analytics.
 
 ## Install
 
-1. Download the `open-print-v….zip` file from the [latest release](https://github.com/davidmarqu3s/open-print/releases/latest) and extract it to a folder you’ll keep.
+1. Download `open-print-latest.zip` from the [latest build](https://github.com/davidmarqu3s/open-print/releases/tag/latest-build) and extract it to a folder you’ll keep.
 2. In Figma desktop, choose **Plugins → Development → Import plugin from manifest…** and select the extracted `manifest.json`.
 
-For unreleased changes, use `open-print-latest.zip` from the [latest build](https://github.com/davidmarqu3s/open-print/releases/tag/latest-build). It’s rebuilt from `main` after every merge and may be less stable.
+The build is updated with every change to `main` and may be less stable than a versioned release.
 
 ## Use
 
-Select up to 32 frames or components, run **Plugins → Development → Open Print**, choose a CMYK profile and click **Export CMYK PDF**. Frames export at Figma’s 72 units per inch, or at a size you type. You can add bleed and crop marks from the plugin.
+Select up to 32 frames or components, run **Plugins → Development → Open Print**, choose a CMYK profile and click **Export CMYK PDF**. Frames export at Figma’s 72 units per inch, or at a size you type.
 
 ## What’s supported
 
