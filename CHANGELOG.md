@@ -4,7 +4,9 @@ Notable changes to Open Print. Each release’s notes are also used on GitHub Re
 
 ## Unreleased
 
-First public release, waiting for Figma Community approval.
+## 0.1.0 – 7 October 2026
+
+First public release.
 
 - Export Figma frames and components as print-ready vector CMYK PDFs, converted inside the plugin.
 - 15 included CMYK profiles, or your own ICC profile.
