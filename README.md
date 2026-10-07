@@ -17,7 +17,7 @@ Export Figma frames as print-ready CMYK PDFs, right inside Figma.
 
 Install Open Print from [Figma Community](https://www.figma.com/community/plugin/1688920299289399456).
 
-You can also install it from a zip. Download `open-print-v….zip` from the [latest release](https://github.com/davidmarqu3s/open-print/releases/latest), which matches the Community version, or `open-print-latest.zip` from the [latest build](https://github.com/davidmarqu3s/open-print/releases/tag/latest-build) to try changes that aren’t released yet. Extract it to a folder you’ll keep, then in Figma desktop choose **Plugins → Development → Import plugin from manifest…** and select the extracted `manifest.json`.
+You can also install it from a zip. Download `open-print-v….zip` from the [latest release](https://github.com/davidmarqu3s/open-print/releases/latest), which matches the Community version. Extract it to a folder you’ll keep, then in Figma desktop choose **Plugins → Development → Import plugin from manifest…** and select the extracted `manifest.json`.
 
 ## Use
 
