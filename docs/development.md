@@ -44,7 +44,7 @@ node build.mjs --profile /path/to/printer-profile.icc
 
 Generated UI files stay out of Git. The repository includes a portable path map with relative paths; keep machine-specific path maps out of Git, and don’t redistribute the bundled profiles without permission.
 
-The manifest uses Open Print’s Figma-assigned plugin ID. If you publish your own fork to the Community, replace it with an ID Figma assigns to you. See [Figma’s manifest documentation](https://developers.figma.com/docs/plugins/manifest/).
+The manifest uses the plugin ID Figma assigned to [Open Print on Figma Community](https://www.figma.com/community/plugin/1688920299289399456). If you publish your own fork to the Community, replace it with an ID Figma assigns to you. See [Figma’s manifest documentation](https://developers.figma.com/docs/plugins/manifest/).
 
 If a build leaves a catalogue profile out, users can select it and import its ICC file; the file’s internal name must match. Imported profiles are stored in Figma client storage, within its [5 MB quota](https://developers.figma.com/docs/plugins/api/figma-clientStorage/).
 
@@ -84,4 +84,4 @@ Changes reach `main` through pull requests and don’t create releases on their 
 
 1. In a pull request, bump `version` in `package.json` and move the **Unreleased** notes in `CHANGELOG.md` under that version and date. Merge it once the tests pass.
 2. On GitHub, draft a new release with a new tag `v` plus that version (for example `v0.1.0`) on `main`, paste the changelog notes and publish it. A workflow then builds and attaches the plugin zip and the Ghostscript source zip.
-3. Publish to Figma Community from that plugin zip, using the same notes.
+3. Publish a new version of the [Community plugin](https://www.figma.com/community/plugin/1688920299289399456) from that plugin zip, using the same notes.
