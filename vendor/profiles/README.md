@@ -1,6 +1,6 @@
 # ICC profile library
 
-These 15 unmodified third-party CMYK ICC files are bundled into the plugin. Adobe profiles came from David’s existing local Adobe installation; ECI profiles came from official ECI download archives. The files retain their original internal description and copyright tags. Their licences are separate from the plugin’s AGPL licence.
+These 15 unmodified third-party CMYK ICC files are bundled into the plugin. Adobe profiles are from Adobe’s ICC profile download; ECI profiles are from the official ECI download archives. The files retain their original internal description and copyright tags. Their licences are separate from the plugin’s AGPL licence.
 
 `paths.json` maps the official catalogue IDs to these files. The default build reads this map and bundles all profiles into the plugin. `SHA256SUMS.txt` records the original bytes.
 
