@@ -1,6 +1,6 @@
 # Open Print
 
-*Export Figma frames as print-ready CMYK PDFs, right inside Figma.*
+Export Figma frames as print-ready CMYK PDFs, right inside Figma.
 
 [![License](https://img.shields.io/badge/license-AGPL_v3-blue.svg?style=flat-square)](LICENSE)
 
