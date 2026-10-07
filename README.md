@@ -1,10 +1,8 @@
-<div align="center">
-  <h1>Open Print</h1>
-  <p><em>Export Figma frames as print-ready CMYK PDFs, right inside Figma.</em></p>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/license-AGPL_v3-blue.svg?style=flat-square" alt="License"></a>
-</div>
+# Open Print
 
-<br/>
+*Export Figma frames as print-ready CMYK PDFs, right inside Figma.*
+
+[![License](https://img.shields.io/badge/license-AGPL_v3-blue.svg?style=flat-square)](LICENSE)
 
 ![Open Print converts RGB Figma artwork into a print-ready CMYK PDF](docs/images/open-print-thumbnail.png)
 
@@ -12,7 +10,7 @@
 
 - **Vector CMYK PDFs**: vectors and text stay sharp, colour is converted with your printer’s profile, and no RGB is left in the file.
 - **Print sizes built in**: create frames at A0 to A6, DL, business card, 50 × 70 and 70 × 100 cm posters, Letter or Tabloid, already at the right Figma size.
-- **Bleed and crop marks**: add 3 mm bleed and registration marks in one click, with trim and bleed boxes set in the PDF.
+- **Bleed and crop marks**: add bleed of any size and registration marks, with trim and bleed boxes set in the PDF.
 - **Private by design**: conversion runs inside the plugin. No server, no uploads, no analytics.
 
 ## Install
