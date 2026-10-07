@@ -13,7 +13,7 @@ For unreleased changes, use `open-print-latest.zip` from the [latest build](http
 
 ## Use
 
-Select up to 32 frames or components, run **Plugins → Development → Open Print**, choose a CMYK profile and click **Export CMYK PDF**. Frames export at Figma’s 72 units per inch, or at a size you type. You can add 3 mm bleed and crop marks from the plugin.
+Select up to 32 frames or components, run **Plugins → Development → Open Print**, choose a CMYK profile and click **Export CMYK PDF**. Frames export at Figma’s 72 units per inch, or at a size you type. You can add bleed and crop marks from the plugin.
 
 ## What’s supported
 
