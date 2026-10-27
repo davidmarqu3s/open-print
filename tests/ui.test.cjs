@@ -221,3 +221,11 @@ test('full-resolution textures are swapped into the PDF, and one that can\u2019t
  const kept=await run(false);assert.deepEqual(kept.widths,[4]);assert.match(kept.status,/Effects are 150 ppi/);
 });
 test('Send feedback opens an email to the maintainer with the version and colour settings',async()=>{const {el,messages}=ui();el('feedback').onclick();const url=messages.at(-1).url;assert.equal(messages.at(-1).type,'open-feedback');assert.match(url,/^mailto:d@davidmarqu\.es\?subject=Open%20Print%20feedback&body=/);assert.match(decodeURIComponent(url.split('body=')[1]),/Open Print 0\.1\.0 · CMYK/);el('color-mode').value='rgb';el('color-mode').onchange();el('feedback').onclick();assert.match(decodeURIComponent(messages.at(-1).url),/Open Print 0\.1\.0 · RGB$/);});
+
+test('individual PDF finishing loads the source once without serialising and reloading each copied page',async()=>{
+ const {context}=ui(),current=exportFixture(),bytes=await convertedPages();
+ const lib=vm.runInContext('PDFLib',context),load=lib.PDFDocument.load;let loads=0;
+ lib.PDFDocument.load=async(...args)=>{loads++;return load.apply(lib.PDFDocument,args);};
+ const outputs=await context.prepareDownloads(bytes,current);assert.equal(loads,1);
+ for(let i=0;i<outputs.length;i++)await inspectOutput(outputs[i].bytes,[current.sizes[i]],current.icc);
+});

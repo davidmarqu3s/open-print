@@ -37,3 +37,18 @@ test('a finished export scaled to another page size still renders its artwork ac
  // The A4 artwork fits A5 almost exactly, so at most a thin sliver at the top and bottom is empty.
  assert(blankShare(finished,trim)<0.03,'artwork fills the A5 trim');
 });
+
+test('finishing a copied document directly preserves mask cleanup and viewer output',async()=>{
+ const source=await PDFDocument.load(await figmaA4());
+ const finish=async direct=>{
+  const single=await PDFDocument.create(),[page]=await single.copyPages(source,[0]);single.addPage(page);
+  const args=[FOGRA39(),210,297,'Coated FOGRA39',null,{bleeds:[3],marks:{offset:3,length:5,weight:0.25}}];
+  const bytes=direct?await core.finishDocument(single,...args):await core.finish(await single.save(),...args);
+  const result=await PDFDocument.load(bytes),out=result.getPage(0),content=out.node.Contents().asArray().map(ref=>Buffer.from(PDFLib.decodePDFRawStream(result.context.lookup(ref)).decode()).toString()).join('\n');
+  assert.doesNotMatch(content,/\/M gs/,'rectangle soft mask is replaced by a clip');assert.match(content,/re W n/);
+  const intent=result.catalog.lookup(PDFName.of('OutputIntents')).lookup(0),icc=intent.lookup(PDFName.of('DestOutputProfile'));
+  assert.deepEqual(Buffer.from(PDFLib.decodePDFRawStream(icc).decode()),FOGRA39());
+  return {trim:out.getTrimBox(),media:out.getMediaBox(),content,white:blankShare(bytes,out.getTrimBox())};
+ };
+ const before=await finish(false),after=await finish(true);assert.deepEqual(after,before);assert.equal(after.white,0);
+});
