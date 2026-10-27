@@ -409,8 +409,12 @@ var PrintCore = {
  // options.pdfx: mark the file PDF/X-4, titled options.title. options.rgb: Figma's own RGB PDF, not converted by Ghostscript.
  async finish(bytes,icc,width,height,profileName,pageSizes,options={}) {
   if(icc) this.validateICC(icc);
-  const {PDFDocument,PDFName,PDFString}=PDFLib;
-  const doc=await PDFDocument.load(bytes);
+  return this.finishDocument(await PDFLib.PDFDocument.load(bytes),icc,width,height,profileName,pageSizes,options);
+ },
+ // Consumes a document already owned by the caller, avoiding a save/load round trip for each copied page.
+ async finishDocument(doc,icc,width,height,profileName,pageSizes,options={}) {
+  if(icc) this.validateICC(icc);
+  const {PDFName,PDFString}=PDFLib;
   this.cleanPaths(doc);
   this.normalizeAlphaMasks(doc);
   this.clipRectangleMasks(doc);

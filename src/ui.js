@@ -336,7 +336,7 @@ async function prepareDownloads(bytes,current){
  for(let i=0;i<converted.getPageCount();i++){
   const single=await PDFLib.PDFDocument.create();const [page]=await single.copyPages(converted,[i]);single.addPage(page);
   const sizes=current.auto?[current.sizes[i]]:null;
-  outputs.push({filename:current.filenames[i],bytes:await PrintCore.finish(await single.save(),current.icc,current.width,current.height,current.name,sizes,{bleeds:current.bleeds?[current.bleeds[i]]:[],fits:current.fits?[current.fits[i]]:null,marks:current.marks,pdfx:current.pdfx,rgb:current.rgb,title:current.filenames[i].replace(/\.pdf$/,'')})});
+  outputs.push({filename:current.filenames[i],bytes:await PrintCore.finishDocument(single,current.icc,current.width,current.height,current.name,sizes,{bleeds:current.bleeds?[current.bleeds[i]]:[],fits:current.fits?[current.fits[i]]:null,marks:current.marks,pdfx:current.pdfx,rgb:current.rgb,title:current.filenames[i].replace(/\.pdf$/,'')})});
  }
  return outputs;
 }
