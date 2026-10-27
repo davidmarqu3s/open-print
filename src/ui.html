@@ -119,6 +119,8 @@ li.issue.warning,li.issue.warning .name{color:var(--warning)}
 #status .step{margin-left:auto;flex:none;color:var(--text2);font-variant-numeric:tabular-nums}
 #status.done{display:grid;grid-template-columns:12px minmax(0,1fr);gap:4px 6px}
 #status.done>*{grid-column:2}
+/* Notes wrap onto lines of their own under the message, including while individual PDFs are saving. */
+#status:has(.note){flex-wrap:wrap}
 #status .note{flex-basis:100%;color:var(--warning)}
 #status.busy::before{content:"";flex:none;width:12px;height:12px;margin-top:2px;border:1.5px solid var(--border);border-top-color:var(--brand);border-radius:50%;animation:spin .8s linear infinite}
 #status a{margin-left:auto;color:var(--figma-color-text-brand,#007be5);font-weight:550;text-decoration:none}
