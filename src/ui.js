@@ -206,7 +206,10 @@ window.onmessage=async event=>{
  if(msg.type==='error'){stop();if(Array.isArray(msg.issues)&&msg.issues.length){issues=msg.issues;renderFrames();const layers=new Set(issues.map(i=>i.nodeId)).size;status((layers===1?'1 layer uses':layers+' layers use')+' an unsupported effect, listed under its frame above. Remove the effect or flatten the layer, then export again.','error');}else status(msg.text,'error');}
  if(msg.type==='pdfs' && job){const current=job;try{current.bleeds=(msg.bleeds||[]).map(px=>px*25.4/72);if(current.auto && msg.sizes)current.sizes=msg.sizes.map(size=>PrintCore.frameSize(size.width,size.height));
   status('Combining pages…','busy');const merged=await PDFLib.PDFDocument.create();
-  for(let i=0;i<msg.pdfs.length;i++){const source=await PDFLib.PDFDocument.load(new Uint8Array(msg.pdfs[i])),scale=(msg.scales&&msg.scales[i]||1)/(current.fits?current.fits[i].scale:1);for(const page of await merged.copyPages(source,source.getPageIndices())){if(scale!==1)page.scale(1/scale,1/scale);merged.addPage(page);}}
+  const firstPages=[];for(let i=0;i<msg.pdfs.length;i++){const source=await PDFLib.PDFDocument.load(new Uint8Array(msg.pdfs[i])),scale=(msg.scales&&msg.scales[i]||1)/(current.fits?current.fits[i].scale:1);firstPages.push(merged.getPageCount());for(const page of await merged.copyPages(source,source.getPageIndices())){if(scale!==1)page.scale(1/scale,1/scale);merged.addPage(page);}}
+  // Noise and texture bigger than Figma's 4,096 px image limit arrive as full-resolution PNGs. Any that can't be swapped in keep Figma's stand-in, at its lower ppi.
+  let effectPpi=msg.effectPpi;
+  for(let i=0;i<(msg.rasters||[]).length;i++)for(const raster of msg.rasters[i]||[]){if(job!==current)return;let swapped=false;try{swapped=PrintCore.replaceImage(merged,merged.getPage(firstPages[i]),raster,await encodeRaster(raster.png));}catch(error){/* Keep the stand-in. */}if(!swapped)effectPpi=Math.min(effectPpi||Infinity,raster.fallbackPpi);}
   // RGB keeps Figma's own PDF, so it skips the engine and the conversion.
   let converted;
   if(current.rgb)converted=await merged.save();
@@ -226,10 +229,20 @@ window.onmessage=async event=>{
   if(job!==current)return;
   const lowest=await PrintCore.imageResolution(converted);if(job!==current)return;
   status(current.icc?'Setting print size and embedding profile…':'Setting print size…','busy');const outputs=await prepareDownloads(converted,current);if(job!==current)return;stop();showDownloads(outputs);
-  if(msg.effectPpi&&msg.effectPpi<300){const note=document.createElement('span');note.className='note';note.textContent='Effects are '+msg.effectPpi+' ppi, below the 300 ppi print target.';el('status').append(note);}
+  if(effectPpi&&effectPpi<300){const note=document.createElement('span');note.className='note';note.textContent='Effects are '+effectPpi+' ppi, below the 300 ppi print target.';el('status').append(note);}
   if(lowest&&lowest.ppi<300){const note=document.createElement('span');note.className='note';note.textContent='Some images are as low as '+lowest.ppi+' ppi'+(lowest.pages>1?' on page '+lowest.page:'')+', below the 300 ppi print target.';el('status').append(note);}
  }catch(error){if(job!==current)return;stop();status(error.message,'error');}}
  };
+// Splits a PNG into JPEG colour and an alpha mask, the way Figma embeds images. The colour is drawn opaque, so the JPEG keeps each pixel's own colour.
+async function encodeRaster(png){
+ const bitmap=await createImageBitmap(new Blob([png],{type:'image/png'})),width=bitmap.width,height=bitmap.height,canvas=document.createElement('canvas');
+ canvas.width=width;canvas.height=height;const context=canvas.getContext('2d');context.drawImage(bitmap,0,0);bitmap.close();
+ const pixels=context.getImageData(0,0,width,height),data=pixels.data;let alpha=null;
+ for(let i=3;i<data.length;i+=4)if(data[i]!==255){alpha=new Uint8Array(width*height);break;}
+ if(alpha){for(let i=0;i<alpha.length;i++){alpha[i]=data[i*4+3];data[i*4+3]=255;}context.putImageData(pixels,0,0);}
+ const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/jpeg',0.92));if(!blob)throw new Error('Couldn’t encode the image.');
+ return {width,height,jpeg:new Uint8Array(await blob.arrayBuffer()),alpha};
+}
 function stopDownloadQueue(){
  const q=downloadQueue;if(!q)return;
  downloadQueue=null;clearTimeout(q.timer);clearTimeout(q.watchdog);

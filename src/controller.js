@@ -75,6 +75,8 @@ const EFFECTS=['DROP_SHADOW','INNER_SHADOW','LAYER_BLUR','BACKGROUND_BLUR'];
 const RASTER_EFFECTS=['NOISE','TEXTURE'];
 // Frames with effects are exported from a scaled copy so their bitmaps reach about 300 ppi at print size.
 const EFFECT_PPI=144,TARGET_PPI=300,MAX_EFFECT_EDGE=16384,MAX_IMAGE_EDGE=4096;
+// Figma images stop at 4,096 px, but its PNG exports don't. A bigger layer gets a 4,096 px stand-in for Figma's PDF, and the window swaps in a full-resolution PNG of up to 8,192 px afterwards.
+const MAX_RASTER_EDGE=8192;
 const hasRaster=node=>(node.effects||[]).some(e=>e.visible!==false&&RASTER_EFFECTS.includes(e.type));
 const containsRaster=node=>node.visible!==false&&(hasRaster(node)||(node.children||[]).some(containsRaster));
 // Records whether the node uses supported effects and whether any must be rasterised. Each issue names its frame and layer so the UI can list it under that frame and zoom to it.
@@ -93,12 +95,15 @@ async function swapForImage(original,copy,topLevel,state) {
  // state.print is how much the page is scaled for a custom page size, so the image reaches 300 ppi at the size it prints.
  const bounds=topLevel?original.absoluteBoundingBox:original.absoluteRenderBounds,target=topLevel?copy.absoluteBoundingBox:copy.absoluteRenderBounds;
  if(!bounds||!target||!bounds.width||!bounds.height)return Infinity;
- const k=Math.min(TARGET_PPI*state.print/72,MAX_IMAGE_EDGE/Math.max(bounds.width,bounds.height));
+ const edge=Math.max(bounds.width,bounds.height),full=Math.min(TARGET_PPI*state.print/72,MAX_RASTER_EDGE/edge);
+ // Each stand-in in a frame is a pixel smaller than the last, so the window can tell them apart in Figma's PDF.
+ const k=Math.min(full,(MAX_IMAGE_EDGE-state.rasters.length)/edge),ppi=Math.round(72*full/state.print);
  const png=await original.exportAsync({format:'PNG',constraint:{type:'SCALE',value:k},useAbsoluteBounds:topLevel});
  // Until Figma has decoded a new image it paints the fill as one flat colour, so wait for it and check the PDF later.
  const created=figma.createImage(png),size=await created.getSizeAsync();state.images.push({width:size.width,height:size.height,hash:created.hash});
+ if(full>k)state.rasters.push({width:size.width,height:size.height,png:await original.exportAsync({format:'PNG',constraint:{type:'SCALE',value:full},useAbsoluteBounds:topLevel}),ppi,fallbackPpi:Math.round(72*k/state.print)});
  const fill={type:'IMAGE',imageHash:created.hash,scaleMode:'FILL'};
- if(topLevel){for(const child of [...copy.children])child.remove();copy.effects=[];copy.strokes=[];copy.fills=[fill];return Math.round(72*k/state.print);}
+ if(topLevel){for(const child of [...copy.children])child.remove();copy.effects=[];copy.strokes=[];copy.fills=[fill];return ppi;}
  const image=figma.createRectangle(),parent=copy.parent;
  parent.insertChild(parent.children.indexOf(copy)+1,image);
  if(parent.layoutMode&&parent.layoutMode!=='NONE')image.layoutPositioning='ABSOLUTE';
@@ -108,7 +113,7 @@ async function swapForImage(original,copy,topLevel,state) {
  image.fills=[fill];image.blendMode=copy.blendMode;
  // Clearing the effects stops Figma baking a bitmap of the hidden layer.
  copy.opacity=0;copy.effects=[];
- return Math.round(72*k/state.print);
+ return ppi;
 }
 // Whether Figma's PDF embeds an image of each expected size. Figma writes image dictionaries uncompressed.
 const RETRIES=10,RETRY_MS=300;
@@ -130,7 +135,7 @@ async function rasterise(original,copy,state,topLevel=false) {
  for(let i=0;i<originals.length;i++)ppi=Math.min(ppi,await rasterise(originals[i],copies[i],state));
  return ppi;
 }
-// Returns the PDF and the factor its page must be scaled down by. The copy never touches the original.
+// Returns the PDF, the factor its page must be scaled down by, and full-resolution PNGs for the window to swap in. The copy never touches the original.
 // print is how much a custom page size scales the frame; effects are rendered for that size.
 // A frame with bleed is exported from a copy inside a clipping frame of trim plus bleed, without the bleed layer's guide outline or the trim outline.
 async function exportFrame(node,found,bleed=0,print=1) {
@@ -148,10 +153,10 @@ async function exportFrame(node,found,bleed=0,print=1) {
    else{const [[a,c],[b,d]]=copy.relativeTransform,xs=[0,a*node.width,c*node.height,a*node.width+c*node.height],ys=[0,b*node.width,d*node.height,b*node.width+d*node.height];copy.relativeTransform=[[a,c,bleed-Math.min(...xs)],[b,d,bleed-Math.min(...ys)]];}const guide=await bleedLayerOf(copy),trim=await layerOf(copy,trimLayer);if(guide)guide.strokes=[];if(trim)trim.visible=false;
   }else figma.currentPage.appendChild(copy);
   const target=wrapper||copy;if(scale!==1)target.rescale(scale);copied=true;
-  const state={images:[],print},ppi=found.effects?Math.min(Math.round(EFFECT_PPI*scale/print),found.raster?await rasterise(node,copy,state,true):Infinity):null;
+  const state={images:[],rasters:[],print},ppi=found.effects?Math.min(Math.round(EFFECT_PPI*scale/print),found.raster?await rasterise(node,copy,state,true):Infinity):null;
   let pdf=await target.exportAsync({format:'PDF'});
   for(let attempt=0;!hasImages(pdf,state.images);attempt++){if(attempt===RETRIES)throw new Error('Figma didn’t finish preparing the image. Try exporting again.');await new Promise(resolve=>setTimeout(resolve,RETRY_MS));pdf=await target.exportAsync({format:'PDF'});}
-  return {pdf,scale,ppi};
+  return {pdf,scale,ppi,rasters:state.rasters};
  }
  catch(error){
   if(found.raster)throw new Error('Couldn’t render the noise or texture in '+node.name+(copied?': '+(error.message||error):'. Figma needs to make a temporary copy of the frame, so check you can edit this file.'));
@@ -264,9 +269,9 @@ async function runExport(ids,id,prints) {
   for(const nodeId of ids){const n=await figma.getNodeByIdAsync(nodeId);if(!n||!PRINTABLE.includes(n.type)||n.parent===null)throw new Error('Select frames or components.');nodes.push(n);}
   const issues=[],effects=nodes.map(n=>inspect(n,issues,n));
   if(issues.length){if(current())figma.ui.postMessage({type:'error',text:issues.slice(0,5).map(i=>i.text).join('\n'),issues});return;}
-  const pdfs=[],sizes=[],bleeds=[],scales=[],ppi=[];
-  for(let i=0;i<nodes.length;i++){if(!current())return;figma.ui.postMessage({type:'status',text:'Exporting frame '+(i+1)+' of '+nodes.length+'…'});sizes.push(shown(nodes[i]));bleeds.push(await bleedOfNode(nodes[i]));const print=Array.isArray(prints)&&prints[i]>0&&prints[i]<=100?prints[i]:1;const result=await exportFrame(nodes[i],effects[i],bleeds[i],print);pdfs.push(result.pdf);scales.push(result.scale);if(result.ppi)ppi.push(result.ppi);}
-  if(current())figma.ui.postMessage({type:'pdfs',pdfs,sizes,bleeds,scales,effectPpi:ppi.length?Math.min(...ppi):null});
+  const pdfs=[],sizes=[],bleeds=[],scales=[],ppi=[],rasters=[];
+  for(let i=0;i<nodes.length;i++){if(!current())return;figma.ui.postMessage({type:'status',text:'Exporting frame '+(i+1)+' of '+nodes.length+'…'});sizes.push(shown(nodes[i]));bleeds.push(await bleedOfNode(nodes[i]));const print=Array.isArray(prints)&&prints[i]>0&&prints[i]<=100?prints[i]:1;const result=await exportFrame(nodes[i],effects[i],bleeds[i],print);pdfs.push(result.pdf);scales.push(result.scale);rasters.push(result.rasters||[]);if(result.ppi)ppi.push(result.ppi);}
+  if(current())figma.ui.postMessage({type:'pdfs',pdfs,sizes,bleeds,scales,rasters,effectPpi:ppi.length?Math.min(...ppi):null});
  }catch(error){if(current())figma.ui.postMessage({type:'error',text:error.message||String(error)});}
 }
 figma.ui.onmessage=async msg=>{

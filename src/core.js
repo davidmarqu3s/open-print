@@ -139,6 +139,33 @@ var PrintCore = {
   for(const [ref] of doc.context.enumerateIndirectObjects())if(!reached.has(ref.toString()))doc.context.delete(ref);
  },
  // Lowest effective resolution of any raster image at final print size, following each Do through q/Q/cm and Form matrices.
+ // Swaps Figma's stand-in for a full-resolution image: the one image XObject on the page of exactly size.width × size.height,
+ // found through form XObjects and patterns. image is {width,height,jpeg,alpha}, alpha one byte per pixel or null.
+ // The stand-in's colour space is kept. Returns false, changing nothing, unless exactly one image matches.
+ replaceImage(doc,page,size,image) {
+  const {PDFName,PDFDict,PDFRef,PDFNumber,PDFStream,PDFRawStream}=PDFLib,context=doc.context,matches=[],seen=new Set();
+  const number=(dict,key)=>{const n=dict.lookup(PDFName.of(key));return n instanceof PDFNumber?n.asNumber():NaN;};
+  const visit=(resources,depth)=>{
+   resources=context.lookup(resources);if(!(resources instanceof PDFDict)||depth>8)return;
+   for(const kind of ['XObject','Pattern']){
+    const dict=context.lookup(resources.get(PDFName.of(kind)));if(!(dict instanceof PDFDict))continue;
+    for(const [name,value] of dict.entries()){
+     const stream=context.lookup(value);if(!(stream instanceof PDFStream))continue;
+     if(stream.dict.get(PDFName.of('Subtype'))===PDFName.of('Image')){if(number(stream.dict,'Width')===size.width&&number(stream.dict,'Height')===size.height)matches.push({dict,name,value,stream});continue;}
+     if(value instanceof PDFRef){if(seen.has(value.toString()))continue;seen.add(value.toString());}
+     visit(stream.dict.get(PDFName.of('Resources')),depth+1);
+    }
+   }
+  };
+  visit(page.node.Resources(),0);
+  if(!matches.length||matches.some(m=>!(m.value instanceof PDFRef))||new Set(matches.map(m=>m.value.toString())).size!==1)return false;
+  const entries={Type:'XObject',Subtype:'Image',Width:image.width,Height:image.height,BitsPerComponent:8,Filter:'DCTDecode',Length:image.jpeg.length};
+  const replacement=PDFRawStream.of(context.obj(entries),image.jpeg),space=matches[0].stream.dict.get(PDFName.of('ColorSpace'));
+  replacement.dict.set(PDFName.of('ColorSpace'),space||PDFName.of('DeviceRGB'));
+  if(image.alpha)replacement.dict.set(PDFName.of('SMask'),context.register(context.flateStream(image.alpha,{Type:'XObject',Subtype:'Image',Width:image.width,Height:image.height,ColorSpace:'DeviceGray',BitsPerComponent:8})));
+  const ref=context.register(replacement);for(const m of matches)m.dict.set(m.name,ref);
+  return true;
+ },
  async imageResolution(bytes) {
   const {PDFDocument,PDFName,PDFDict,PDFArray,PDFNumber,PDFRawStream,decodePDFRawStream}=PDFLib;
   const doc=await PDFDocument.load(bytes),seen=new Set();let lowest=null;
