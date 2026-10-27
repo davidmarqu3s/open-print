@@ -1,7 +1,7 @@
 const {test}=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');const PDFLib=require('../vendor/pdf-lib.min.js');
 function profile(){const p=Buffer.alloc(132);p.writeUInt32BE(132);p.write('CMYK',16);p.write('acsp',36);return p;}
 test('finishing keeps vector artwork at natural size and embeds exact profile',async()=>{const ctx={PDFLib,Uint8Array,DataView,Number,Error};vm.createContext(ctx);vm.runInContext(fs.readFileSync('src/core.js','utf8'),ctx);const doc=await PDFLib.PDFDocument.create();doc.addPage([907,1276]).drawRectangle({x:12,y:34,width:100,height:50,color:PDFLib.cmyk(.1,.2,.3,.4)});const original=await doc.save();const output=await ctx.PrintCore.finish(original,profile(),320,450,'Test');const result=await PDFLib.PDFDocument.load(output);assert.equal(result.getPage(0).getWidth(),320*72/25.4);assert.equal(result.getPage(0).getHeight(),450*72/25.4);const intent=result.catalog.lookup(PDFLib.PDFName.of('OutputIntents'),PDFLib.PDFArray).lookup(0,PDFLib.PDFDict);const embedded=intent.lookup(PDFLib.PDFName.of('DestOutputProfile'),PDFLib.PDFRawStream);assert.equal(embedded.dict.lookup(PDFLib.PDFName.of('N'),PDFLib.PDFNumber).asNumber(),4);assert.deepEqual(Buffer.from(PDFLib.decodePDFRawStream(embedded).decode()),profile());const contents=result.getPage(0).node.Contents();const streams=contents.asArray().map(ref=>result.context.lookup(ref));const text=streams.map(s=>Buffer.from(PDFLib.decodePDFRawStream(s).decode()).toString()).join('\n');assert(text.includes('100'));assert(text.includes('50'));assert(text.includes('0.1 0.2 0.3 0.4 k'));assert(!text.includes(' rg'));});
-function controller(nodes){const messages=[];const figma={showUI(){},on(){},currentPage:{selection:nodes},getNodeByIdAsync:async id=>nodes.find(n=>n.id===id),ui:{postMessage:m=>messages.push(m)}};const context={figma,__html__:'',Set,setTimeout,clearTimeout};vm.createContext(context);vm.runInContext(fs.readFileSync('src/controller.js','utf8'),context);return {figma,messages};}
+function controller(nodes){const messages=[],timings=[];const figma={showUI(){},on(){},currentPage:{selection:nodes},getNodeByIdAsync:async id=>nodes.find(n=>n.id===id),ui:{postMessage:m=>messages.push(m)}};const context={figma,__html__:'',Set,setTimeout,clearTimeout,console:{info:line=>timings.push(JSON.parse(line.slice('[Open Print timing] '.length)))}};vm.createContext(context);vm.runInContext(fs.readFileSync('src/controller.js','utf8'),context);return {figma,messages,timings};}
 test('gradients no longer block export, including text segment gradients',async()=>{let exports=0;const n={id:'1',type:'FRAME',parent:{},name:'Sheet',width:200,height:100,fills:[{type:'GRADIENT_ANGULAR'}],children:[{type:'TEXT',name:'Gradient text',characters:'a',getStyledTextSegments:()=>[{fills:[{type:'GRADIENT_LINEAR'}]}]}],exportAsync:async()=>{exports++;return new Uint8Array([1]);}};const {figma,messages}=controller([n]);await figma.ui.onmessage({type:'export',ids:['1']});assert.equal(exports,1);assert.equal(messages.at(-1).type,'pdfs');assert.deepEqual([...messages.at(-1).scales],[1]);});
 function effectFrame(effects,size={width:200,height:100},cloneFails=false){
  const log={original:0,copy:[],appended:0};
@@ -111,3 +111,19 @@ test('a full-resolution image replaces the one stand-in of its exact size, insid
 });
 test('feedback opens only mailto links outside Figma',async()=>{const {figma}=controller([]);const opened=[];figma.openExternal=url=>opened.push(url);await figma.ui.onmessage({type:'open-feedback',url:'mailto:d@davidmarqu.es'});await figma.ui.onmessage({type:'open-feedback',url:'https://example.com'});assert.deepEqual(opened,['mailto:d@davidmarqu.es']);});
 test('an image covers the scaled copy of everything the layer draws, even effect overflow the copy didn\u2019t scale',async()=>{const {log,figma,messages}=rasterTree({overflow:50});await figma.ui.onmessage({type:'export',ids:['1']});assert.equal(messages.at(-1).type,'pdfs',messages.at(-1).text);const image=log.inserted.find(n=>n.type==='RECTANGLE');assert.deepEqual(image.size,[(100+100)*2,(100+100)*2]);assert.deepEqual(JSON.parse(JSON.stringify(image.relativeTransform)),[[1,0,20-100],[0,1,20-100]]);});
+
+test('timings identify the run, frame and failed stage without logging artwork',async()=>{
+ for(const fail of [false,true]){
+  const n={id:'1',type:'FRAME',parent:{},name:'Private title',width:100,height:100,exportAsync:async()=>{if(fail)throw new Error('Private error');return new Uint8Array([1,2,3]);}};
+  const {figma,messages,timings}=controller([n]);await figma.ui.onmessage({type:'export',ids:['1'],run:'timing-test'});
+  assert.equal(messages.at(-1).type,fail?'error':'pdfs');
+  const stage=timings.find(t=>t.stage==='figma.pdf');assert.equal(stage.run,'timing-test');assert.equal(stage.frame,1);assert.equal(stage.outcome,fail?'error':'ok');assert(stage.ms>=0);
+  assert.equal(timings.at(-1).stage,'controller.total');assert.equal(timings.at(-1).outcome,fail?'error':'ok');
+  assert(!JSON.stringify(timings).includes('Private'));assert(!JSON.stringify(timings).includes('[1,2,3]'));
+ }
+});
+
+test('image-size and clone failures include their failed preparation timing',async()=>{
+ let t=rasterTree({cloneFails:true});await t.figma.ui.onmessage({type:'export',ids:['1'],run:'failed-clone'});assert(t.timings.some(t=>t.stage==='frame.clone-rescale'&&t.outcome==='error'));
+ t=rasterTree();t.figma.createImage=()=>({getSizeAsync:async()=>{throw new Error('Image unavailable');}});await t.figma.ui.onmessage({type:'export',ids:['1'],run:'failed-image'});assert(t.timings.some(t=>t.stage==='image.create-size'&&t.outcome==='error'));assert(t.log.copy.removed);
+});
