@@ -127,3 +127,17 @@ test('image-size and clone failures include their failed preparation timing',asy
  let t=rasterTree({cloneFails:true});await t.figma.ui.onmessage({type:'export',ids:['1'],run:'failed-clone'});assert(t.timings.some(t=>t.stage==='frame.clone-rescale'&&t.outcome==='error'));
  t=rasterTree();t.figma.createImage=()=>({getSizeAsync:async()=>{throw new Error('Image unavailable');}});await t.figma.ui.onmessage({type:'export',ids:['1'],run:'failed-image'});assert(t.timings.some(t=>t.stage==='image.create-size'&&t.outcome==='error'));assert(t.log.copy.removed);
 });
+
+test('cancelling a missing resize reply releases the temporary copy and the next export',async()=>{
+ const t=rasterTree({size:2000});const post=t.figma.ui.postMessage;let seen,skip=true;const waiting=new Promise(resolve=>seen=resolve);
+ t.figma.ui.postMessage=m=>{if(m.type==='shrink'&&skip){skip=false;seen();return;}post(m);};
+ const first=t.figma.ui.onmessage({type:'export',ids:['1'],run:'cancel-resize'});await waiting;const copy=t.log.copy;
+ await t.figma.ui.onmessage({type:'cancel'});await first;assert(copy.removed);assert.equal(t.log.pngs.length,1,'cancel must not trigger a stand-in rerender');assert(!t.messages.some(m=>m.type==='pdfs'));
+ await t.figma.ui.onmessage({type:'export',ids:['1'],run:'after-cancel'});assert.equal(t.messages.at(-1).type,'pdfs');assert.equal(t.messages.at(-1).run,'after-cancel');
+});
+test('a missing resize reply times out and clears its pending request; late replies are ignored',async()=>{
+ const timers=new Map();let next=0;const context={figma:{showUI(){},on(){},currentPage:{selection:[]},ui:{postMessage(){}}},__html__:'',setTimeout:(fn,ms)=>{timers.set(++next,{fn,ms});return next;},clearTimeout:id=>timers.delete(id)};
+ vm.createContext(context);vm.runInContext(fs.readFileSync('src/controller.js','utf8'),context);
+ const pending=context.shrinkInWindow(new Uint8Array(1),10,10,'timeout');const failure=assert.rejects(pending,/timed out/);const [id,timer]=[...timers][0];assert.equal(timer.ms,60000);timers.delete(id);timer.fn();await failure;
+ assert.equal(vm.runInContext('shrinking.size',context),0);await context.figma.ui.onmessage({type:'shrunk',id:1,png:new Uint8Array(1)});assert.equal(timers.size,0);
+});
