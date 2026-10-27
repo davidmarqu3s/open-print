@@ -125,12 +125,15 @@ async function swapForImage(original,copy,topLevel,state) {
  return ppi;
 }
 // Whether Figma's PDF embeds an image of each expected size. Figma writes image dictionaries uncompressed.
+// Each wait is longer than the last, about 16 seconds in all, since big images take Figma a while.
 const RETRIES=10,RETRY_MS=300;
 function hasImages(pdf,expected) {
  if(!expected.length)return true;
  let text='';// Figma's sandbox allows at most 65,534 arguments per call, so read the bytes in small chunks.
  for(let i=0;i<pdf.length;i+=8192)text+=String.fromCharCode.apply(null,pdf.subarray(i,i+8192));
- const found=(text.match(/<<[^<>]*\/Subtype\s*\/Image[^<>]*>>/g)||[]).map(d=>[Number((d.match(/\/Width\s+(\d+)/)||[])[1]),Number((d.match(/\/Height\s+(\d+)/)||[])[1])]);
+ // A transparent image's alpha is a second image, its soft mask. Masks don't count, or one finished image and its mask would pass for two.
+ const masks=new Set([...text.matchAll(/\/SMask\s+(\d+)\s+\d+\s+R/g)].map(m=>m[1]));
+ const found=[...text.matchAll(/(?:(\d+)\s+\d+\s+obj\s*)?(<<[^<>]*\/Subtype\s*\/Image[^<>]*>>)/g)].filter(m=>!masks.has(m[1])).map(([,,d])=>[Number((d.match(/\/Width\s+(\d+)/)||[])[1]),Number((d.match(/\/Height\s+(\d+)/)||[])[1])]);
  // Matching the aspect ratio still passes if Figma resamples the image. Each distinct image needs an image of its own, so one square image can't stand in for two.
  const unused=found.slice();
  return [...new Map(expected.map(size=>[size.hash,size])).values()].every(size=>{const i=unused.findIndex(([w,h])=>w&&h&&Math.abs(w/h-size.width/size.height)<0.01*size.width/size.height);if(i<0)return false;unused.splice(i,1);return true;});
@@ -164,7 +167,7 @@ async function exportFrame(node,found,bleed=0,print=1) {
   const target=wrapper||copy;if(scale!==1)target.rescale(scale);copied=true;
   const state={images:[],rasters:[],print},ppi=found.effects?Math.min(Math.round(EFFECT_PPI*scale/print),found.raster?await rasterise(node,copy,state,true):Infinity):null;
   let pdf=await target.exportAsync({format:'PDF'});
-  for(let attempt=0;!hasImages(pdf,state.images);attempt++){if(attempt===RETRIES)throw new Error('Figma didn’t finish preparing the image. Try exporting again.');await new Promise(resolve=>setTimeout(resolve,RETRY_MS));pdf=await target.exportAsync({format:'PDF'});}
+  for(let attempt=0;!hasImages(pdf,state.images);attempt++){if(attempt===RETRIES)throw new Error('Figma didn’t finish preparing the image. Try exporting again.');await new Promise(resolve=>setTimeout(resolve,RETRY_MS*(attempt+1)));pdf=await target.exportAsync({format:'PDF'});}
   return {pdf,scale,ppi,rasters:state.rasters};
  }
  catch(error){
