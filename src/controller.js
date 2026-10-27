@@ -90,6 +90,11 @@ function inspect(node,issues,frame,found={effects:false,raster:false}) {
 }
 const multiply=(a,b)=>[0,1].map(r=>[a[r][0]*b[0][0]+a[r][1]*b[1][0],a[r][0]*b[0][1]+a[r][1]*b[1][1],a[r][0]*b[0][2]+a[r][1]*b[1][2]+a[r][2]]);
 function invert(m){const d=m[0][0]*m[1][1]-m[0][1]*m[1][0],a=m[1][1]/d,b=-m[0][1]/d,c=-m[1][0]/d,e=m[0][0]/d;return [[a,b,-(a*m[0][2]+b*m[1][2])],[c,e,-(c*m[0][2]+e*m[1][2])]];}
+// A PNG's size is in its header, 16 bytes in.
+const pngWidth=png=>(png[16]<<24|png[17]<<16|png[18]<<8|png[19])>>>0,pngHeight=png=>(png[20]<<24|png[21]<<16|png[22]<<8|png[23])>>>0;
+// The window resizes PNGs, because the plugin sandbox can't decode images. Each request waits for its own reply.
+let shrinkId=0;const shrinking=new Map();
+function shrinkInWindow(png,width,height){const id=++shrinkId;return new Promise((resolve,reject)=>{shrinking.set(id,{resolve,reject});figma.ui.postMessage({type:'shrink',id,png,width,height});});}
 // Covers the copied layer with a PNG of the original and hides the copy, keeping its place in any auto layout. Returns the image's ppi at print size.
 async function swapForImage(original,copy,topLevel,state) {
  // state.print is how much the page is scaled for a custom page size, so the image reaches 300 ppi at the size it prints.
@@ -98,10 +103,14 @@ async function swapForImage(original,copy,topLevel,state) {
  const edge=Math.max(bounds.width,bounds.height),full=Math.min(TARGET_PPI*state.print/72,MAX_RASTER_EDGE/edge);
  // Each stand-in in a frame is a pixel smaller than the last, so the window can tell them apart in Figma's PDF.
  const k=Math.min(full,(MAX_IMAGE_EDGE-state.rasters.length)/edge),ppi=Math.round(72*full/state.print);
- const png=await original.exportAsync({format:'PNG',constraint:{type:'SCALE',value:k},useAbsoluteBounds:topLevel});
+ // A big layer is rendered once, at full resolution, and the window shrinks that PNG for the stand-in, which takes a second where rendering again takes Figma as long again.
+ const exportAt=value=>original.exportAsync({format:'PNG',constraint:{type:'SCALE',value},useAbsoluteBounds:topLevel});
+ const large=full>k?await exportAt(full):null;let png=null;
+ if(large){const width=pngWidth(large),height=pngHeight(large),fit=(MAX_IMAGE_EDGE-state.rasters.length)/Math.max(width,height);try{png=await shrinkInWindow(large,Math.max(1,Math.round(width*fit)),Math.max(1,Math.round(height*fit)));}catch(error){/* Figma renders the stand-in instead. */}}
+ if(!png)png=await exportAt(k);
  // Until Figma has decoded a new image it paints the fill as one flat colour, so wait for it and check the PDF later.
  const created=figma.createImage(png),size=await created.getSizeAsync();state.images.push({width:size.width,height:size.height,hash:created.hash});
- if(full>k)state.rasters.push({width:size.width,height:size.height,png:await original.exportAsync({format:'PNG',constraint:{type:'SCALE',value:full},useAbsoluteBounds:topLevel}),ppi,fallbackPpi:Math.round(72*k/state.print)});
+ if(large)state.rasters.push({width:size.width,height:size.height,png:large,ppi,fallbackPpi:Math.round(72*k/state.print)});
  const fill={type:'IMAGE',imageHash:created.hash,scaleMode:'FILL'};
  if(topLevel){for(const child of [...copy.children])child.remove();copy.effects=[];copy.strokes=[];copy.fills=[fill];return ppi;}
  const image=figma.createRectangle(),parent=copy.parent;
@@ -283,6 +292,7 @@ figma.ui.onmessage=async msg=>{
  // Selects a layer that may be on another page, such as an instance's main component.
  if(msg.type==='select-layer'){try{const node=await figma.getNodeByIdAsync(String(msg.id));let page=node;while(page&&page.type!=='PAGE')page=page.parent;if(!node||!page)return;if(page!==figma.currentPage)await figma.setCurrentPageAsync(page);figma.currentPage.selection=[node];figma.viewport.scrollAndZoomIntoView([node]);}catch(error){/* The layer was deleted. */}return;}
  if(msg.type==='new-frame'){try{newPaperFrame(String(msg.size));}catch(error){figma.ui.postMessage({type:'error',text:error.message||String(error)});}await selection();return;}
+ if(msg.type==='shrunk'){const request=shrinking.get(msg.id);if(request){shrinking.delete(msg.id);if(msg.png)request.resolve(msg.png);else request.reject(new Error(msg.error||'Couldn’t resize the image.'));}return;}
  if(msg.type==='cancel'){exportId++;return;}
  if(msg.type==='open-feedback'){if(typeof msg.url==='string'&&msg.url.startsWith('mailto:'))figma.openExternal(msg.url);return;}
  if(msg.type==='show-bleed'||msg.type==='hide-bleed'){

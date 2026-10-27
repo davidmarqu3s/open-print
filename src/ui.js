@@ -206,6 +206,7 @@ window.onmessage=async event=>{
   updateSize();renderFrames();refresh();}
  // Preflight results replace the last set and are kept per frame, so they can arrive before or after the selection.
  if(msg.type==='preflight'){checks=new Map((msg.frames||[]).map(f=>[f.id,f]));renderPreflight();renderFrames();}
+ if(msg.type==='shrink'){let reply;try{reply={png:await shrinkPng(msg.png,msg.width,msg.height)};}catch(error){reply={error:error.message||String(error)};}parent.postMessage({pluginMessage:{type:'shrunk',id:msg.id,...reply}},'*');}
  if(msg.type==='status')status(msg.text,'busy');
  if(msg.type==='error'){stop();if(Array.isArray(msg.issues)&&msg.issues.length){issues=msg.issues;renderFrames();const layers=new Set(issues.map(i=>i.nodeId)).size;status((layers===1?'1 layer uses':layers+' layers use')+' an unsupported effect, listed under its frame above. Remove the effect or flatten the layer, then export again.','error');}else status(msg.text,'error');}
  if(msg.type==='pdfs' && job){const current=job;try{current.bleeds=(msg.bleeds||[]).map(px=>px*25.4/72);if(current.auto && msg.sizes)current.sizes=msg.sizes.map(size=>PrintCore.frameSize(size.width,size.height));
@@ -237,6 +238,13 @@ window.onmessage=async event=>{
   if(lowest&&lowest.ppi<300){const note=document.createElement('span');note.className='note';note.textContent='Some images are as low as '+lowest.ppi+' ppi'+(lowest.pages>1?' on page '+lowest.page:'')+', below the 300 ppi print target.';el('status').append(note);}
  }catch(error){if(job!==current)return;stop();status(error.message,'error');}}
  };
+// Resizes a PNG for Figma's stand-in image, with the browser's high-quality resampling.
+async function shrinkPng(png,width,height){
+ const bitmap=await createImageBitmap(new Blob([png],{type:'image/png'}),{resizeWidth:width,resizeHeight:height,resizeQuality:'high'}),canvas=document.createElement('canvas');
+ canvas.width=width;canvas.height=height;canvas.getContext('2d').drawImage(bitmap,0,0);bitmap.close();
+ const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/png'));if(!blob)throw new Error('Couldn’t resize the image.');
+ return new Uint8Array(await blob.arrayBuffer());
+}
 // Splits a PNG into JPEG colour and an alpha mask, the way Figma embeds images. The colour is drawn opaque, so the JPEG keeps each pixel's own colour.
 async function encodeRaster(png){
  const bitmap=await createImageBitmap(new Blob([png],{type:'image/png'})),width=bitmap.width,height=bitmap.height,canvas=document.createElement('canvas');
