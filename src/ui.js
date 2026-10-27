@@ -6,10 +6,11 @@ const decodeProfile=OpenPrintAssets.decodeProfile;
 const encodeProfile=bytes=>{let text='';for(let offset=0;offset<bytes.length;offset+=8192)text+=String.fromCharCode(...bytes.subarray(offset,offset+8192));return btoa(text);};
 if(BUNDLED_PROFILES.custom){customProfile=decodeProfile(BUNDLED_PROFILES.custom);customName=PrintCore.profileDescription(customProfile)||'Custom CMYK profile';}
 // Progress messages from every export stage, mapped to a step so long exports show how far along they are.
-const STEPS=[['Preparing',1],['Exporting frame',1],['Combining',2],['Loading conversion',3],['Downloading',3],['Converting',4],['Setting print',5]],STEP_COUNT=5;
+// RGB exports skip the conversion, so they have three steps instead of five.
+const STEPS=[['Preparing',1,1],['Exporting frame',1,1],['Combining',2,2],['Loading conversion',3],['Downloading',3],['Converting',4],['Setting print',5,3]];
 function status(text,tone=''){
- const step=tone==='busy'&&STEPS.find(([prefix])=>text.startsWith(prefix));
- if(step){const label=document.createElement('span'),count=document.createElement('span');label.textContent=text;count.className='step';count.textContent='Step '+step[1]+' of '+STEP_COUNT;el('status').replaceChildren(label,count);}
+ const rgb=!!(job&&job.rgb),step=tone==='busy'&&STEPS.find(([prefix])=>text.startsWith(prefix));
+ if(step){const label=document.createElement('span'),count=document.createElement('span');label.textContent=text;count.className='step';count.textContent='Step '+step[rgb?2:1]+' of '+(rgb?3:5);el('status').replaceChildren(label,count);}
  else el('status').textContent=text;
  el('status').className=text?tone:'';
 }
@@ -27,7 +28,9 @@ function setToggle(id,on,label){const button=el(id);if(button.on!==on){button.in
 // Bleed arrives from the canvas in frame units, 72 to the inch.
 const frameBleed=frame=>printable(frame)&&frame.bleed>0?Math.round(frame.bleed*25.4/72*100)/100:0;
 const formatLength=mm=>(unit==='in'?Math.round(mm/25.4*1000)/1000:mm)+' '+unit;
-const marksOn=()=>marksEnabled,pdfxOn=()=>el('pdfx').checked&&!!profile;
+// RGB keeps Figma's colours as they are, so the CMYK profile and print options don't apply.
+const rgbOn=()=>el('color-mode').value==='rgb';
+const marksOn=()=>marksEnabled,pdfxOn=()=>!rgbOn()&&el('pdfx').checked&&!!profile;
 // A custom page size scales each frame to fit, so the bleed that reaches the PDF shrinks with it.
 const fitFor=frame=>autoSize||dimensions.width===null||dimensions.height===null||sizeProblem()?null:PrintCore.fit(PrintCore.frameSize(frame.width,frame.height),dimensions);
 const pdfBleed=frame=>{const fit=fitFor(frame);return Math.round(PrintCore.scaledBleed(frameBleed(frame),fit?fit.scale:1)*100)/100;};
@@ -70,8 +73,8 @@ function preflightIssues(frame){
   if(f.kind==='bleed')add('warning','Needs bleed',f);
   if(f.kind!=='text')continue;
    if(f.size!==null&&f.size*scale<PREFLIGHT.smallText)add('warning',pt(f.size)+' text',f);
-  // Without Pure black as 100% K, #000000 prints in four inks too.
-  const rich=Math.min(f.rich===null?Infinity:f.rich,f.pure!==null&&!el('pure-black').checked?f.pure:Infinity);
+  // Without Pure black as 100% K, #000000 prints in four inks too. RGB has no inks to count.
+  const rich=rgbOn()?Infinity:Math.min(f.rich===null?Infinity:f.rich,f.pure!==null&&!el('pure-black').checked?f.pure:Infinity);
   if(rich*scale<PREFLIGHT.richText)add('warning','Rich black '+pt(rich)+' text',f);
   if(f.gap!==null&&f.gap*scale<PREFLIGHT.safe*POINTS_PER_MM)add('warning','Within '+PREFLIGHT.safe+' mm of the edge',f);
  }
@@ -105,9 +108,9 @@ function renderFrames(){el('frames').replaceChildren();let listed=0;if(!frames.l
 li.append(nameNode(frame.name));if(!valid){size.textContent='Not a frame or component';li.append(size);}el('frames').append(li);listed+=renderIssues(frame);}el('frames').className=listed?'expanded':'';}
 function sizeProblem(){if(autoSize)return '';if(dimensions.width===null||dimensions.height===null)return 'Enter a width and height.';try{PrintCore.points(dimensions.width);PrintCore.points(dimensions.height);return '';}catch(error){return error.message;}}
 function fieldInvalid(id){if(autoSize||dimensions[id]===null)return false;try{PrintCore.points(dimensions[id]);return false;}catch(error){return true;}}
-function profileProblem(){if(el('profile-mode').value==='none'||profile)return '';const entry=PROFILE_CATALOG.find(p=>p.id===el('profile-mode').value);return entry?'Import '+entry.name+' to export.':'Choose a CMYK profile to export.';}
-function refresh(){const invalid=frames.filter(f=>!printable(f)),problem=sizeProblem(),count=frames.length-invalid.length,separate=el('export-mode').value==='separate';const marking=marksProblem(),scaling=scaleProblem().text;el('export').disabled=busy||!!downloadQueue||!!profileProblem()||!frames.length||invalid.length>0||!!problem||!!marking||!!scaling;el('export').textContent=busy?'Exporting…':count<2?'Export CMYK PDF':separate?'Export '+count+' CMYK PDFs':'Export '+count+'-page CMYK PDF';el('export-hint').textContent=busy?'':!frames.length?'':invalid.length?'Only frames and components can be exported. Deselect '+(invalid.length===1?'“'+invalid[0].name+'”':invalid.length+' layers')+'.':problem?'':marking?'Fix the crop mark settings to export.':scaling?'Fix the bleed to export.':profileProblem();
- const widthInvalid=fieldInvalid('width'),heightInvalid=fieldInvalid('height');el('width-field').className='field'+(widthInvalid?' invalid':'');el('height-field').className='field'+(heightInvalid?' invalid':'');el('size-error').textContent=problem;el('size-error').className='hint'+(widthInvalid||heightInvalid?' error':'');el('size-snap').disabled=busy||!!downloadQueue;el('frame-count').textContent=!frames.length?'':invalid.length?frames.length+' selected':frames.length+(frames.length===1?' page':' pages');el('cancel').hidden=!busy;el('cancel').textContent='Cancel';el('profile').disabled=busy||!!downloadQueue;el('profile-mode').disabled=busy||!!downloadQueue;el('width').disabled=busy||!!downloadQueue;el('height').disabled=busy||!!downloadQueue;el('size-reset').disabled=busy||!!downloadQueue;el('units').disabled=busy||!!downloadQueue;el('new-frame').disabled=busy||!!downloadQueue;newFrameLabel();el('export-options').hidden=count<2;el('export-mode').disabled=busy||!!downloadQueue;
+function profileProblem(){if(rgbOn()||el('profile-mode').value==='none'||profile)return '';const entry=PROFILE_CATALOG.find(p=>p.id===el('profile-mode').value);return entry?'Import '+entry.name+' to export.':'Choose a CMYK profile to export.';}
+function refresh(){const invalid=frames.filter(f=>!printable(f)),problem=sizeProblem(),count=frames.length-invalid.length,separate=el('export-mode').value==='separate';const marking=marksProblem(),scaling=scaleProblem().text;el('export').disabled=busy||!!downloadQueue||!!profileProblem()||!frames.length||invalid.length>0||!!problem||!!marking||!!scaling;const kind=rgbOn()?'RGB':'CMYK';el('export').textContent=busy?'Exporting…':count<2?'Export '+kind+' PDF':separate?'Export '+count+' '+kind+' PDFs':'Export '+count+'-page '+kind+' PDF';el('export-hint').textContent=busy?'':!frames.length?'':invalid.length?'Only frames and components can be exported. Deselect '+(invalid.length===1?'“'+invalid[0].name+'”':invalid.length+' layers')+'.':problem?'':marking?'Fix the crop mark settings to export.':scaling?'Fix the bleed to export.':profileProblem();
+ const widthInvalid=fieldInvalid('width'),heightInvalid=fieldInvalid('height');el('width-field').className='field'+(widthInvalid?' invalid':'');el('height-field').className='field'+(heightInvalid?' invalid':'');el('size-error').textContent=problem;el('size-error').className='hint'+(widthInvalid||heightInvalid?' error':'');el('size-snap').disabled=busy||!!downloadQueue;el('frame-count').textContent=!frames.length?'':invalid.length?frames.length+' selected':frames.length+(frames.length===1?' page':' pages');el('cancel').hidden=!busy;el('cancel').textContent='Cancel';el('profile').disabled=busy||!!downloadQueue;el('profile-mode').disabled=busy||!!downloadQueue;el('color-mode').disabled=busy||!!downloadQueue;el('cmyk-options').hidden=rgbOn();el('color-section').className=rgbOn()?'collapsed':'';el('width').disabled=busy||!!downloadQueue;el('height').disabled=busy||!!downloadQueue;el('size-reset').disabled=busy||!!downloadQueue;el('units').disabled=busy||!!downloadQueue;el('new-frame').disabled=busy||!!downloadQueue;newFrameLabel();el('export-options').hidden=count<2;el('export-mode').disabled=busy||!!downloadQueue;
  const locked=busy||!!downloadQueue,bleeds=frames.map(frameBleed).filter(b=>b),shown=[...new Set(bleeds)];
  // The header button is − once every selected frame has bleed, otherwise +. The amount shows once any frame has bleed, and editing it resizes that bleed.
  // Instances can't take new layers, so the button acts on frames and components only, and instances show their main component's bleed.
@@ -176,7 +179,7 @@ el('mark-weight').oninput=()=>{marks.weight=el('mark-weight').value===''?NaN:Num
 el('marks-toggle').onclick=()=>{marksEnabled=!marksEnabled;clearResult();refresh();};
 // Clicking anywhere on a header row does what its button does. A click on the button itself is left to the button: it redraws its icon, so the clicked element has left the page by the time the click reaches the row.
 for(const [head,button] of [['bleed-head','bleed-toggle'],['marks-head','marks-toggle']])el(head).onclick=event=>{if(event&&event.composedPath&&event.composedPath().includes(el(button)))return;if(!el(button).disabled)el(button).onclick();};
-el('pdfx').onchange=el('pure-black').onchange=()=>{clearResult();refresh();};
+el('pdfx').onchange=el('pure-black').onchange=el('color-mode').onchange=()=>{clearResult();refresh();};
 const frameIds=()=>frames.filter(editable).map(f=>f.id),allBleed=()=>{const valid=frames.filter(editable);return valid.length>0&&valid.every(frameBleed);};
 const addBleed=()=>{if(bleedProblem())return;parent.postMessage({pluginMessage:{type:'show-bleed',ids:frameIds(),bleed:bleedSetting*72/25.4}},'*');};
 el('bleed-toggle').onclick=()=>{if(allBleed())parent.postMessage({pluginMessage:{type:'hide-bleed',ids:frameIds()}},'*');else{if(bleedProblem()&&el('bleed-options').hidden){bleedSetting=3;showLengths();}addBleed();}};
@@ -185,7 +188,11 @@ el('bleed').onchange=()=>{if(busy||downloadQueue)return;if(allBleed()&&frames.so
 showLengths();
 for(const id of ['width','height'])el(id).oninput=()=>{dimensions[id]=el(id).value===''?null:Number(el(id).value)*(unit==='in'?25.4:1);autoSize=false;clearResult();updateSize();};
 el('profile').onchange=async event=>{const generation=++profileRead;const mode=el('profile-mode').value;try{const file=event.target.files[0];if(!file)return;profile=null;refresh();if(file.size>5*1024*1024)throw new Error('ICC profile is too large.');const bytes=new Uint8Array(await file.arrayBuffer());if(generation!==profileRead)return;PrintCore.validateICC(bytes);const name=PrintCore.profileDescription(bytes);const entry=PROFILE_CATALOG.find(p=>p.id===mode);if(entry && name!==entry.name)throw new Error('Choose '+entry.name+'. This file contains '+(name||'an unnamed profile')+'.');if(entry){const encoded=encodeProfile(bytes);profiles[mode]=encoded;parent.postMessage({pluginMessage:{type:'save-profile',id:mode,encoded}},'*');}else{customProfile=bytes;customName=name||file.name;}chooseProfile();}catch(error){if(generation!==profileRead)return;status(error.message,'error');}refresh();};
-el('export').onclick=()=>{try{const width=dimensions.width,height=dimensions.height;const auto=autoSize;const sizes=auto?frames.map(f=>PrintCore.frameSize(f.width,f.height)):null;if(sizes)for(const size of sizes){PrintCore.points(size.width);PrintCore.points(size.height);}else{PrintCore.points(width);PrintCore.points(height);}stopDownloadQueue();for(const url of downloadUrls)URL.revokeObjectURL(url);downloadUrls=[];job={individual:frames.length>1&&el('export-mode').value!=='combined',filenames:frames.map(f=>f.name+'.pdf'),filename:frames[0].name+'.pdf',width,height,auto,sizes,unit,displayWidth:el('width').value,displayHeight:el('height').value,icc:profile?profile.slice():null,name:profileName,marks:marksOn()?{...marks}:null,fits:auto?null:frames.map(fitFor),pureBlack:el('pure-black').checked,pdfx:pdfxOn()};busy=true;refresh();status('Preparing frames…','busy');parent.postMessage({pluginMessage:{type:'export',ids:frames.map(f=>f.id),prints:job.fits?job.fits.map(f=>f.scale):null}},'*');}catch(error){status(error.message,'error');}};
+el('export').onclick=()=>{try{const width=dimensions.width,height=dimensions.height;const auto=autoSize;const sizes=auto?frames.map(f=>PrintCore.frameSize(f.width,f.height)):null;if(sizes)for(const size of sizes){PrintCore.points(size.width);PrintCore.points(size.height);}else{PrintCore.points(width);PrintCore.points(height);}stopDownloadQueue();for(const url of downloadUrls)URL.revokeObjectURL(url);downloadUrls=[];job={individual:frames.length>1&&el('export-mode').value!=='combined',filenames:frames.map(f=>f.name+'.pdf'),filename:frames[0].name+'.pdf',width,height,auto,sizes,unit,displayWidth:el('width').value,displayHeight:el('height').value,rgb:rgbOn(),icc:profile&&!rgbOn()?profile.slice():null,name:rgbOn()?'':profileName,marks:marksOn()?{...marks}:null,fits:auto?null:frames.map(fitFor),pureBlack:!rgbOn()&&el('pure-black').checked,pdfx:pdfxOn()};busy=true;refresh();status('Preparing frames…','busy');parent.postMessage({pluginMessage:{type:'export',ids:frames.map(f=>f.id),prints:job.fits?job.fits.map(f=>f.scale):null}},'*');}catch(error){status(error.message,'error');}};
+// Feedback opens a new email to the maintainer, with the version and colour settings below the space for the message.
+const FEEDBACK_EMAIL='d@davidmarqu.es';
+function feedbackUrl(){const settings=['Open Print '+VERSION,rgbOn()?'RGB':'CMYK'+(profileName?', '+profileName:'')];return 'mailto:'+FEEDBACK_EMAIL+'?subject='+encodeURIComponent('Open Print feedback')+'&body='+encodeURIComponent('\n\n\n'+settings.join(' · '));}
+el('feedback').onclick=()=>parent.postMessage({pluginMessage:{type:'open-feedback',url:feedbackUrl()}},'*');
 el('cancel').onclick=()=>{parent.postMessage({pluginMessage:{type:'cancel'}},'*');stop();status('Export cancelled.');};
 window.onmessage=async event=>{
  const msg=event.data.pluginMessage;if(!msg)return;
@@ -199,11 +206,19 @@ window.onmessage=async event=>{
   updateSize();renderFrames();refresh();}
  // Preflight results replace the last set and are kept per frame, so they can arrive before or after the selection.
  if(msg.type==='preflight'){checks=new Map((msg.frames||[]).map(f=>[f.id,f]));renderPreflight();renderFrames();}
+ if(msg.type==='shrink'){let reply;try{reply={png:await shrinkPng(msg.png,msg.width,msg.height)};}catch(error){reply={error:error.message||String(error)};}parent.postMessage({pluginMessage:{type:'shrunk',id:msg.id,...reply}},'*');}
  if(msg.type==='status')status(msg.text,'busy');
  if(msg.type==='error'){stop();if(Array.isArray(msg.issues)&&msg.issues.length){issues=msg.issues;renderFrames();const layers=new Set(issues.map(i=>i.nodeId)).size;status((layers===1?'1 layer uses':layers+' layers use')+' an unsupported effect, listed under its frame above. Remove the effect or flatten the layer, then export again.','error');}else status(msg.text,'error');}
  if(msg.type==='pdfs' && job){const current=job;try{current.bleeds=(msg.bleeds||[]).map(px=>px*25.4/72);if(current.auto && msg.sizes)current.sizes=msg.sizes.map(size=>PrintCore.frameSize(size.width,size.height));
   status('Combining pages…','busy');const merged=await PDFLib.PDFDocument.create();
-  for(let i=0;i<msg.pdfs.length;i++){const source=await PDFLib.PDFDocument.load(new Uint8Array(msg.pdfs[i])),scale=(msg.scales&&msg.scales[i]||1)/(current.fits?current.fits[i].scale:1);for(const page of await merged.copyPages(source,source.getPageIndices())){if(scale!==1)page.scale(1/scale,1/scale);merged.addPage(page);}}
+  const firstPages=[];for(let i=0;i<msg.pdfs.length;i++){const source=await PDFLib.PDFDocument.load(new Uint8Array(msg.pdfs[i])),scale=(msg.scales&&msg.scales[i]||1)/(current.fits?current.fits[i].scale:1);firstPages.push(merged.getPageCount());for(const page of await merged.copyPages(source,source.getPageIndices())){if(scale!==1)page.scale(1/scale,1/scale);merged.addPage(page);}}
+  // Noise and texture bigger than Figma's 4,096 px image limit arrive as full-resolution PNGs. Any that can't be swapped in keep Figma's stand-in, at its lower ppi.
+  let effectPpi=msg.effectPpi;
+  for(let i=0;i<(msg.rasters||[]).length;i++)for(const raster of msg.rasters[i]||[]){if(job!==current)return;let swapped=false;try{swapped=PrintCore.replaceImage(merged,merged.getPage(firstPages[i]),raster,await encodeRaster(raster.png));}catch(error){/* Keep the stand-in. */}if(!swapped)effectPpi=Math.min(effectPpi||Infinity,raster.fallbackPpi);}
+  // RGB keeps Figma's own PDF, so it skips the engine and the conversion.
+  let converted;
+  if(current.rgb)converted=await merged.save();
+  else{
   if(job!==current)return;status('Loading conversion engine…','busy');const downloadAbort=new AbortController();engineAbort=downloadAbort;refresh();const downloadTimer=setTimeout(()=>downloadAbort.abort(),60000);let wasm;try{wasm=await OpenPrintAssets.loadEngine(downloadAbort.signal,fraction=>{if(job===current)status('Downloading engine… '+Math.floor(fraction*100)+'%','busy');});}finally{clearTimeout(downloadTimer);}if(job!==current)return;engineAbort=null;
   const convert=bytes=>new Promise((resolve,reject)=>{
    const url=URL.createObjectURL(new Blob([WORKER_SOURCE],{type:'text/javascript'})),w=new Worker(url);URL.revokeObjectURL(url);worker=w;refresh();const engine=wasm.slice();
@@ -214,13 +229,37 @@ window.onmessage=async event=>{
   if(current.pureBlack)PrintCore.pureBlack(merged);
   status('Converting colors to CMYK…','busy');
   await PrintShading.toCMYK(merged,async bytes=>{const output=await convert(bytes);if(job!==current)throw new Error('Conversion cancelled.');return output;});
-  if(job!==current)return;const converted=await convert(await merged.save());if(job!==current)return;
+  if(job!==current)return;converted=await convert(await merged.save());
+  }
+  if(job!==current)return;
   const lowest=await PrintCore.imageResolution(converted);if(job!==current)return;
   status(current.icc?'Setting print size and embedding profile…':'Setting print size…','busy');const outputs=await prepareDownloads(converted,current);if(job!==current)return;stop();showDownloads(outputs);
-  if(msg.effectPpi&&msg.effectPpi<300){const note=document.createElement('span');note.className='note';note.textContent='Effects are '+msg.effectPpi+' ppi, below the 300 ppi print target.';el('status').append(note);}
+  if(effectPpi&&effectPpi<300){const note=document.createElement('span');note.className='note';note.textContent='Effects are '+effectPpi+' ppi, below the 300 ppi print target.';el('status').append(note);}
   if(lowest&&lowest.ppi<300){const note=document.createElement('span');note.className='note';note.textContent='Some images are as low as '+lowest.ppi+' ppi'+(lowest.pages>1?' on page '+lowest.page:'')+', below the 300 ppi print target.';el('status').append(note);}
  }catch(error){if(job!==current)return;stop();status(error.message,'error');}}
  };
+// Resizes a PNG for Figma's stand-in image, with the browser's high-quality resampling.
+async function shrinkPng(png,width,height){
+ const bitmap=await createImageBitmap(new Blob([png],{type:'image/png'}),{resizeWidth:width,resizeHeight:height,resizeQuality:'high'}),canvas=document.createElement('canvas');
+ canvas.width=width;canvas.height=height;canvas.getContext('2d').drawImage(bitmap,0,0);bitmap.close();
+ const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/png'));if(!blob)throw new Error('Couldn’t resize the image.');
+ return new Uint8Array(await blob.arrayBuffer());
+}
+// Splits a PNG into JPEG colour and an alpha mask, the way Figma embeds images, at Figma's JPEG quality of about 76. The colour is drawn opaque, so the JPEG keeps each pixel's own colour.
+async function encodeRaster(png){
+ const bitmap=await createImageBitmap(new Blob([png],{type:'image/png'})),width=bitmap.width,height=bitmap.height,canvas=document.createElement('canvas');
+ canvas.width=width;canvas.height=height;const context=canvas.getContext('2d');context.drawImage(bitmap,0,0);bitmap.close();
+ const pixels=context.getImageData(0,0,width,height),data=pixels.data;let alpha=null;
+ for(let i=3;i<data.length;i+=4)if(data[i]!==255){alpha=new Uint8Array(width*height);break;}
+ // The canvas stores colour multiplied by alpha, so a transparent pixel reads back black and a nearly transparent one, under 16, reads back
+ // a colour 8 or more levels out. Those take the colour of the last reliable pixel before them, or of the first one for pixels before any.
+ // Grain over a flat colour then compresses to a fraction of the size, with no black or stray colour bleeding into what shows.
+ const RELIABLE=16;
+ if(alpha){let first=3;while(first<data.length&&data[first]<RELIABLE)first+=4;let r=data[first-3]||0,g=data[first-2]||0,b=data[first-1]||0;
+  for(let i=0;i<alpha.length;i++){const k=i*4;alpha[i]=data[k+3];if(alpha[i]>=RELIABLE){r=data[k];g=data[k+1];b=data[k+2];}else{data[k]=r;data[k+1]=g;data[k+2]=b;}data[k+3]=255;}context.putImageData(pixels,0,0);}
+ const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/jpeg',0.76));if(!blob)throw new Error('Couldn’t encode the image.');
+ return {width,height,jpeg:new Uint8Array(await blob.arrayBuffer()),alpha};
+}
 function stopDownloadQueue(){
  const q=downloadQueue;if(!q)return;
  downloadQueue=null;clearTimeout(q.timer);clearTimeout(q.watchdog);
@@ -272,14 +311,14 @@ function showDownloads(outputs){
  a.click();return [a];
 }
 async function prepareDownloads(bytes,current){
- if(!current.individual)return [{filename:current.filename,bytes:await PrintCore.finish(bytes,current.icc,current.width,current.height,current.name,current.sizes,{bleeds:current.bleeds,fits:current.fits,marks:current.marks,pdfx:current.pdfx,title:current.filename.replace(/\.pdf$/,'')})}];
+ if(!current.individual)return [{filename:current.filename,bytes:await PrintCore.finish(bytes,current.icc,current.width,current.height,current.name,current.sizes,{bleeds:current.bleeds,fits:current.fits,marks:current.marks,pdfx:current.pdfx,rgb:current.rgb,title:current.filename.replace(/\.pdf$/,'')})}];
  const converted=await PDFLib.PDFDocument.load(bytes);
  if(converted.getPageCount()!==current.filenames.length)throw new Error('The exported page count does not match the selected frames. Please try again.');
  const outputs=[];
  for(let i=0;i<converted.getPageCount();i++){
   const single=await PDFLib.PDFDocument.create();const [page]=await single.copyPages(converted,[i]);single.addPage(page);
   const sizes=current.auto?[current.sizes[i]]:null;
-  outputs.push({filename:current.filenames[i],bytes:await PrintCore.finish(await single.save(),current.icc,current.width,current.height,current.name,sizes,{bleeds:current.bleeds?[current.bleeds[i]]:[],fits:current.fits?[current.fits[i]]:null,marks:current.marks,pdfx:current.pdfx,title:current.filenames[i].replace(/\.pdf$/,'')})});
+  outputs.push({filename:current.filenames[i],bytes:await PrintCore.finish(await single.save(),current.icc,current.width,current.height,current.name,sizes,{bleeds:current.bleeds?[current.bleeds[i]]:[],fits:current.fits?[current.fits[i]]:null,marks:current.marks,pdfx:current.pdfx,rgb:current.rgb,title:current.filenames[i].replace(/\.pdf$/,'')})});
  }
  return outputs;
 }

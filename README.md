@@ -21,7 +21,7 @@ You can also install it from a zip. Download `open-print-v….zip` from the [lat
 
 ## Use
 
-Select up to 32 frames or components, run **Plugins → Open Print**, choose a CMYK profile and click **Export CMYK PDF**. Frames export at Figma’s 72 units per inch, or at a size you type.
+Select up to 32 frames or components, run **Plugins → Open Print**, choose a CMYK profile and click **Export CMYK PDF**. A selected component set exports each variant as a page. Frames export at Figma’s 72 units per inch, or at a size you type. To keep Figma’s colours, switch **Color** to **RGB**.
 
 ## What’s supported
 

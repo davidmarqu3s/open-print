@@ -77,3 +77,17 @@ test('Alpha mask solid-color rewriting supports gray and RGB but skips complex c
  assert.equal(rewrite('0.2 0.3 0.4 rg 0 0 10 10 re f'),'1 1 1 rg 0 0 10 10 re f');
  for(const text of ['/Im Do','/Shade sh','/GS gs 0 g 0 0 10 10 re f','BI /W 1 ID x EI','(0 g) Tj','0 g % 0 g\n0 0 10 10 re f'])assert.equal(rewrite(text),text);
 });
+test('an alpha mask that only fills one rectangle becomes a clip, so macOS Preview shows the whole page',async()=>{
+ const PDFLib=require('../vendor/pdf-lib.min.js'),ctx={PDFLib,Uint8Array,DataView,Number,Error};vm.createContext(ctx);vm.runInContext(fs.readFileSync('src/core.js','utf8'),ctx);const {PDFName}=PDFLib;
+ const build=async mask=>{const doc=await PDFLib.PDFDocument.create(),c=doc.context,page=doc.addPage([100,100]);
+  const g=c.register(c.flateStream(Buffer.from(mask),{Type:'XObject',Subtype:'Form',BBox:[0,0,200,300],Group:{S:'Transparency',Type:'Group'},Resources:{}}));
+  page.node.set(PDFName.of('Resources'),c.obj({ExtGState:{E1:{Type:'ExtGState',SMask:{Type:'Mask',S:'Alpha',G:g}}}}));
+  page.node.set(PDFName.of('Contents'),c.register(c.flateStream(Buffer.from('q 0.5 0 0 0.5 0 0 cm /Artifact BMC q /E1 gs 0 0 1 rg 0 0 200 300 re f Q EMC Q'))));
+  ctx.PrintCore.clipRectangleMasks(doc);const saved=await PDFLib.PDFDocument.load(await doc.save());
+  const contents=saved.getPage(0).node.Contents(),streams=contents instanceof PDFLib.PDFArray?contents.asArray().map(r=>saved.context.lookup(r)):[contents];return streams.map(st=>Buffer.from(PDFLib.decodePDFRawStream(st).decode()).toString()).join('\n');};
+ const figma='Q\n1.000000 0.000000 -0.000000 1.000000 0.000000 0.000000 cm\n0.000000 0.000000 0.000000 scn\n0.000000 300.000000 m\n200.000000 300.000000 l\n200.000000 0.000000 l\n0.000000 0.000000 l\n0.000000 300.000000 l\nh\nf\nn\nQ\n';
+ const clipped=await build(figma);assert.match(clipped,/0 0 200 300 re W n/);assert.doesNotMatch(clipped,/\/E1 gs/);
+ assert.match(await build('0 g 0 0 200 300 re f'),/0 0 200 300 re W n/,'a re rectangle also becomes a clip');
+ assert.match(await build('0 0 0 scn 0 0 m 200 300 l 0 300 l h f'),/\/E1 gs/,'a triangle stays a mask');
+ assert.match(await build('0 0 0 scn 0 0 100 100 re f 100 100 100 100 re f'),/\/E1 gs/,'two rectangles stay a mask');
+});

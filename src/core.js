@@ -61,6 +61,72 @@ var PrintCore = {
    mask.set(PDFName.of('G'),doc.context.register(white));
   }
  },
+ // The rectangle an alpha mask's Form fills, if that is all it draws, as [x0,y0,x1,y1]. Figma clips frames this way.
+ maskRectangle(bytes) {
+  let text='';for(let i=0;i<bytes.length;i+=8192)text+=String.fromCharCode(...bytes.subarray(i,i+8192));
+  const arity={m:2,l:2,re:4,h:0,f:0,'f*':0,n:0,q:0,Q:0,cm:6,cs:1,CS:1,sc:-1,scn:-1,g:1,rg:3,k:4};
+  const xs=[],ys=[];let operands=[],fills=0;
+  for(const [token] of text.matchAll(/\S+/g)){
+   if(/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$/.test(token)||/^\/\S+$/.test(token)){operands.push(token);continue;}
+   if(!Object.prototype.hasOwnProperty.call(arity,token)||(arity[token]>=0&&operands.length!==arity[token]))return null;
+   const n=operands.map(Number);
+   if(token==='cm'&&n.join(' ')!=='1 0 0 1 0 0'&&n.join(' ')!=='1 0 -0 1 0 0')return null;
+   if(token==='m'||token==='l'){xs.push(n[0]);ys.push(n[1]);}
+   if(token==='re'){xs.push(n[0],n[0]+n[2],n[0]+n[2],n[0]);ys.push(n[1],n[1],n[1]+n[3],n[1]+n[3]);}
+   if(token==='f'||token==='f*')fills++;
+   operands=[];
+  }
+  if(operands.length||fills!==1||!xs.length)return null;
+  const x0=Math.min(...xs),x1=Math.max(...xs),y0=Math.min(...ys),y1=Math.max(...ys);
+  // Every point is a corner and all four corners are used, so the path is the rectangle itself.
+  const corners=new Set(xs.map((x,i)=>x+','+ys[i]));
+  return x1>x0&&y1>y0&&corners.size===4&&xs.every((x,i)=>(x===x0||x===x1)&&(ys[i]===y0||ys[i]===y1))?[x0,y0,x1,y1]:null;
+ },
+ // Figma clips a frame with an alpha mask that fills one rectangle. macOS Preview and Quick Look scale such a mask twice
+ // when the content around it is scaled, as a page exported from a scaled-up copy is, and show only a corner of the page.
+ // A clip to the same rectangle draws the same thing everywhere.
+ clipRectangleMasks(doc) {
+  const {PDFName,PDFDict,PDFStream,PDFRawStream,PDFArray,decodePDFRawStream}=PDFLib,context=doc.context,seen=new Set();
+  const decode=stream=>stream instanceof PDFRawStream?decodePDFRawStream(stream).decode():stream.getContents();
+  const rewrite=(streams,states)=>{
+   const clips=new Map();
+   for(const [name,value] of states.entries()){
+    const state=context.lookup(value);if(!(state instanceof PDFDict)||state.entries().some(([k])=>!['Type','SMask'].includes(k.decodeText())))continue;
+    const mask=context.lookup(state.get(PDFName.of('SMask')));if(!(mask instanceof PDFDict)||mask.get(PDFName.of('S'))!==PDFName.of('Alpha')||mask.get(PDFName.of('BC'))||mask.get(PDFName.of('TR')))continue;
+    const form=context.lookup(mask.get(PDFName.of('G')));if(!(form instanceof PDFStream)||form.dict.get(PDFName.of('Matrix')))continue;
+    const rect=this.maskRectangle(decode(form));if(rect)clips.set(name.decodeText(),rect);
+   }
+   if(!clips.size)return streams;
+   return streams.map(stream=>{
+    let text='';const bytes=decode(stream);for(let i=0;i<bytes.length;i+=8192)text+=String.fromCharCode(...bytes.subarray(i,i+8192));
+    const out=text.replace(/\/([^\s\/\[\]()<>{}%]+)\s+gs\b/g,(match,name)=>{const r=clips.get(name);return r?r[0]+' '+r[1]+' '+(r[2]-r[0])+' '+(r[3]-r[1])+' re W n':match;});
+    if(out===text)return stream;
+    const fixed=context.flateStream(Uint8Array.from(out,c=>c.charCodeAt(0)));
+    for(const [key,value] of stream.dict.entries())if(!['Length','Filter','DecodeParms'].includes(key.decodeText()))fixed.dict.set(key,value);
+    return fixed;
+   });
+  };
+  const resourcesOf=holder=>context.lookup(holder.get(PDFName.of('Resources')));
+  const statesOf=resources=>resources instanceof PDFDict?context.lookup(resources.get(PDFName.of('ExtGState'))):null;
+  const forms=resources=>{
+   const xobjects=resources instanceof PDFDict?context.lookup(resources.get(PDFName.of('XObject'))):null;if(!(xobjects instanceof PDFDict))return;
+   for(const [name,value] of xobjects.entries()){
+    const form=context.lookup(value);if(!(form instanceof PDFStream)||form.dict.get(PDFName.of('Subtype'))!==PDFName.of('Form')||seen.has(form))continue;seen.add(form);
+    const inner=resourcesOf(form.dict),states=statesOf(inner);
+    if(states instanceof PDFDict){const [fixed]=rewrite([form],states);if(fixed!==form){const ref=context.register(fixed);xobjects.set(name,ref);}}
+    forms(inner);
+   }
+  };
+  for(const page of doc.getPages()){
+   const resources=page.node.Resources(),states=statesOf(resources);
+   if(states instanceof PDFDict){
+    const contents=page.node.Contents(),refs=contents instanceof PDFArray?contents.asArray():[page.node.get(PDFName.of('Contents'))];
+    const streams=refs.map(ref=>context.lookup(ref)),fixed=rewrite(streams,states);
+    if(fixed.some((stream,i)=>stream!==streams[i]))page.node.set(PDFName.of('Contents'),context.obj(fixed.map((stream,i)=>stream===streams[i]?refs[i]:context.register(stream))));
+   }
+   forms(resources);
+  }
+ },
  // PDF path state is separate from q/Q graphics state. A paint or n clears it.
  cleanContent(bytes,state={active:false}) {
   if(state.unsupported)return bytes;const originalActive=state.active;
@@ -139,6 +205,35 @@ var PrintCore = {
   for(const [ref] of doc.context.enumerateIndirectObjects())if(!reached.has(ref.toString()))doc.context.delete(ref);
  },
  // Lowest effective resolution of any raster image at final print size, following each Do through q/Q/cm and Form matrices.
+ // Swaps Figma's stand-in for a full-resolution image: the one image XObject on the page of exactly size.width × size.height,
+ // found through form XObjects and patterns. image is {width,height,jpeg,alpha}, alpha one byte per pixel or null.
+ // The stand-in's colour space is kept, and the stand-in is removed from the file. Returns false, changing nothing, unless exactly one image matches.
+ replaceImage(doc,page,size,image) {
+  const {PDFName,PDFDict,PDFRef,PDFNumber,PDFStream,PDFRawStream}=PDFLib,context=doc.context,matches=[],seen=new Set();
+  const number=(dict,key)=>{const n=dict.lookup(PDFName.of(key));return n instanceof PDFNumber?n.asNumber():NaN;};
+  const visit=(resources,depth)=>{
+   resources=context.lookup(resources);if(!(resources instanceof PDFDict)||depth>8)return;
+   for(const kind of ['XObject','Pattern']){
+    const dict=context.lookup(resources.get(PDFName.of(kind)));if(!(dict instanceof PDFDict))continue;
+    for(const [name,value] of dict.entries()){
+     const stream=context.lookup(value);if(!(stream instanceof PDFStream))continue;
+     if(stream.dict.get(PDFName.of('Subtype'))===PDFName.of('Image')){if(number(stream.dict,'Width')===size.width&&number(stream.dict,'Height')===size.height)matches.push({dict,name,value,stream});continue;}
+     if(value instanceof PDFRef){if(seen.has(value.toString()))continue;seen.add(value.toString());}
+     visit(stream.dict.get(PDFName.of('Resources')),depth+1);
+    }
+   }
+  };
+  visit(page.node.Resources(),0);
+  if(!matches.length||matches.some(m=>!(m.value instanceof PDFRef))||new Set(matches.map(m=>m.value.toString())).size!==1)return false;
+  const entries={Type:'XObject',Subtype:'Image',Width:image.width,Height:image.height,BitsPerComponent:8,Filter:'DCTDecode',Length:image.jpeg.length};
+  const replacement=PDFRawStream.of(context.obj(entries),image.jpeg),space=matches[0].stream.dict.get(PDFName.of('ColorSpace'));
+  replacement.dict.set(PDFName.of('ColorSpace'),space||PDFName.of('DeviceRGB'));
+  if(image.alpha)replacement.dict.set(PDFName.of('SMask'),context.register(context.flateStream(image.alpha,{Type:'XObject',Subtype:'Image',Width:image.width,Height:image.height,ColorSpace:'DeviceGray',BitsPerComponent:8})));
+  const ref=context.register(replacement);for(const m of matches)m.dict.set(m.name,ref);
+  // pdf-lib saves every object it holds, used or not, so the stand-in and its mask are deleted rather than left as dead weight.
+  const mask=matches[0].stream.dict.get(PDFName.of('SMask'));if(mask instanceof PDFRef)context.delete(mask);context.delete(matches[0].value);
+  return true;
+ },
  async imageResolution(bytes) {
   const {PDFDocument,PDFName,PDFDict,PDFArray,PDFNumber,PDFRawStream,decodePDFRawStream}=PDFLib;
   const doc=await PDFDocument.load(bytes),seen=new Set();let lowest=null;
@@ -311,13 +406,14 @@ var PrintCore = {
   doc.catalog.delete(PDFName.of('Version'));
  },
  // options.bleeds: each page's bleed in mm, already exported around the artwork. options.marks: crop marks, or null.
- // options.pdfx: mark the file PDF/X-4, titled options.title.
+ // options.pdfx: mark the file PDF/X-4, titled options.title. options.rgb: Figma's own RGB PDF, not converted by Ghostscript.
  async finish(bytes,icc,width,height,profileName,pageSizes,options={}) {
   if(icc) this.validateICC(icc);
   const {PDFDocument,PDFName,PDFString}=PDFLib;
   const doc=await PDFDocument.load(bytes);
   this.cleanPaths(doc);
   this.normalizeAlphaMasks(doc);
+  this.clipRectangleMasks(doc);
   this.dropUnusedColorSpaces(doc);
   const pages=doc.getPages(),marks=options.marks||null,pt=mm=>mm*72/25.4;
   if(pageSizes && pageSizes.length!==pages.length)throw new Error('Frame and PDF page counts do not match.');
@@ -345,7 +441,7 @@ var PrintCore = {
   const intent=doc.context.register(doc.context.obj({Type:'OutputIntent',S:'GTS_PDFX',OutputConditionIdentifier:PDFString.of(profileName),Info:PDFString.of(profileName),DestOutputProfile:profile}));
   doc.catalog.set(PDFName.of('OutputIntents'),doc.context.obj([intent]));
   }
-  doc.setProducer('Open Print · Ghostscript + pdf-lib');
+  doc.setProducer(options.rgb?'Open Print · pdf-lib':'Open Print · Ghostscript + pdf-lib');
   if(!options.pdfx)return doc.save();
   if(!icc)throw new Error('PDF/X-4 needs a colour profile.');
   this.markPDFX4(doc,options.title||'Untitled');
