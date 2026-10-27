@@ -88,11 +88,19 @@ test('consecutive downloads hide the conversion cancel button',()=>{
  h.emit('blur');h.emit('focus');h.runTimers(1000);assert.equal(pdfClicks(h).length,2);
  assert.doesNotMatch(h.el('status').textContent,/Stop remaining downloads/i);
 });
-test('no native save dialog pauses the queue instead of dropping later downloads',()=>{
- const h=ui();h.context.showDownloads(threeDownloads());h.runTimers(3000);
- assert.equal(pdfClicks(h).length,1);assert.match(h.el('status').textContent,/paused|could not detect|didn.t detect/i);
- h.emit('blur');h.emit('focus');h.runTimers(5000);assert.equal(pdfClicks(h).length,1);
- assert.equal(listenerCount(h),0);assert.equal(h.timers.size,0);
+test('a late native Save dialog keeps the remaining PDFs queued',()=>{
+ const h=ui();h.context.showDownloads(threeDownloads());h.runTimers(10000);
+ assert.equal(pdfClicks(h).length,1);assert.equal(listenerCount(h),2);assert.equal(h.el('export').disabled,true);
+ h.emit('blur');h.runTimers(10000);assert.equal(pdfClicks(h).length,1);
+ h.emit('focus');h.runTimers(1000);assert.equal(pdfClicks(h).length,2);
+ h.emit('blur');h.emit('focus');h.runTimers(1000);assert.equal(pdfClicks(h).length,3);
+ h.emit('blur');h.emit('focus');assert.equal(listenerCount(h),0);assert.equal(h.timers.size,0);
+});
+test('an export finishing unfocused waits for focus before its first Save dialog',()=>{
+ const h=ui();h.emit('blur');h.context.showDownloads(threeDownloads());h.runTimers(10000);assert.equal(pdfClicks(h).length,0);
+ h.emit('focus');assert.equal(pdfClicks(h).length,1);h.runTimers(10000);assert.equal(pdfClicks(h).length,1);
+ h.emit('blur');h.emit('focus');h.runTimers(1000);assert.equal(pdfClicks(h).length,2);
+ h.context.stopDownloadQueue();assert.equal(listenerCount(h),0);assert.equal(h.timers.size,0);
 });
 test('a new export stops delivery before revoking previous download URLs',async()=>{
  const h=ui();await h.window.onmessage({data:{pluginMessage:{type:'selection',frames:[frame('1',595,842),frame('2',907,1276)]}}});
@@ -102,8 +110,7 @@ test('a new export stops delivery before revoking previous download URLs',async(
 });
 test('focus lost during the gap waits for another focus before requesting the next PDF',()=>{
  const h=ui();h.context.showDownloads(threeDownloads());h.emit('blur');h.emit('focus');h.emit('blur');h.runTimers(1000);
- assert.equal(pdfClicks(h).length,1);h.emit('focus');h.runTimers(999);assert.equal(pdfClicks(h).length,1);
- h.runTimers(1);assert.equal(pdfClicks(h).length,2);
+ assert.equal(pdfClicks(h).length,1);h.emit('focus');assert.equal(pdfClicks(h).length,2);
 });
 
 const select=(h,frames)=>h.window.onmessage({data:{pluginMessage:{type:'selection',frames}}});
