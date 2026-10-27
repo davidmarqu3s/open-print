@@ -15,6 +15,12 @@ Then import `manifest.json` in Figma desktop. Every pull request and every push 
 
 The tests cover sizing, profile validation and embedding, vector content, vector CMYK gradients, scaled effects, noise and texture, bleed and crop marks, image resolution, PDF clean-up, the engine download, preflight, export order, the plugin panel, and a check that original nodes are never modified. Sample artwork is not included.
 
+## Export timings
+
+The controller and plugin window write `[Open Print timing]` JSON records to Figma’s developer console. Records share a run ID and include a stage, elapsed milliseconds, and scalar metadata such as frame number, attempt, image dimensions and byte count. Artwork, layer names and PDF/image bytes are excluded. Nothing is stored or sent over the network.
+
+Compare `texture.render`, `texture.shrink-transfer`, `image.create-size`, `image.check-pdf`, `image.retry-wait` and each `figma.pdf` attempt with `pdf.merge`, `texture.encode`, `pdf.replace-image`, `pdf.shading`, `pdf.serialize`, `ghostscript.*`, `pdf.finalize` and `export.ready`. `pdf.transfer` measures send-to-receive delay, including message serialisation and scheduling. Stages can nest; don’t add nested times together. Save timings measure requests and iframe focus events, not successful writes: Figma doesn’t report whether the native dialog saved or cancelled.
+
 ## How export works
 
 - **Page size:** 72 frame units per inch, rounded to 0.01 mm. Inches convert at exactly 25.4 mm. Standard-size matching covers A0–A6, DL, B1–B5, SRA3, 50 × 70 and 70 × 100 cm posters, Letter, Legal, Tabloid and business cards.

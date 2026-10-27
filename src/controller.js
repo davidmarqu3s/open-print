@@ -1,3 +1,12 @@
+// Console-only diagnostics: scalar metadata keeps artwork and large buffers out of logs.
+function exportTimer(stage,run,details={}) {
+ const started=Date.now();
+ return (outcome='ok',extra={})=>console.info('[Open Print timing] '+JSON.stringify({run,stage,ms:Date.now()-started,outcome,...details,...extra}));
+}
+async function timeExport(stage,run,details,work) {
+ const end=exportTimer(stage,run,details);
+ try{const result=await work();end();return result;}catch(error){end('error');throw error;}
+}
 figma.showUI(__html__, {width:320,height:560,themeColors:true});
 // New frame creates a paper-size frame at 72 units per inch, the scale the export uses, rounded to whole pixels like Figma's own presets (A4 is 595 × 842).
 const PAPER_FRAMES={'A0':[841,1189],'A1':[594,841],'A2':[420,594],'A3':[297,420],'A4':[210,297],'A5':[148,210],'A6':[105,148],'DL':[99,210],'Business card':[85,55],'50 × 70 cm poster':[500,700],'70 × 100 cm poster':[700,1000],'Letter':[215.9,279.4],'Tabloid':[279.4,431.8]};
@@ -94,7 +103,7 @@ function invert(m){const d=m[0][0]*m[1][1]-m[0][1]*m[1][0],a=m[1][1]/d,b=-m[0][1
 const pngWidth=png=>(png[16]<<24|png[17]<<16|png[18]<<8|png[19])>>>0,pngHeight=png=>(png[20]<<24|png[21]<<16|png[22]<<8|png[23])>>>0;
 // The window resizes PNGs, because the plugin sandbox can't decode images. Each request waits for its own reply.
 let shrinkId=0;const shrinking=new Map();
-function shrinkInWindow(png,width,height){const id=++shrinkId;return new Promise((resolve,reject)=>{shrinking.set(id,{resolve,reject});figma.ui.postMessage({type:'shrink',id,png,width,height});});}
+function shrinkInWindow(png,width,height,run){const id=++shrinkId;return new Promise((resolve,reject)=>{shrinking.set(id,{resolve,reject});figma.ui.postMessage({type:'shrink',id,run,png,width,height});});}
 // Where the copy draws what the original draws inside bounds. Effects that reach past a layer, like texture, don't all grow when the copy is rescaled,
 // so the copy's own render bounds can be too small for the PNG; the original's, scaled by the copy's size, are not.
 function placeLike(original,copy,bounds) {
@@ -111,12 +120,13 @@ async function swapForImage(original,copy,topLevel,state) {
  // Each stand-in in a frame is a pixel smaller than the last, so the window can tell them apart in Figma's PDF.
  const k=Math.min(full,(MAX_IMAGE_EDGE-state.rasters.length)/edge),ppi=Math.round(72*full/state.print);
  // A big layer is rendered once, at full resolution, and the window shrinks that PNG for the stand-in, which takes a second where rendering again takes Figma as long again.
- const exportAt=value=>original.exportAsync({format:'PNG',constraint:{type:'SCALE',value},useAbsoluteBounds:topLevel});
+ const exportAt=value=>timeExport('texture.render',state.run,{frame:state.frame,layer:state.images.length+1,scale:value},()=>original.exportAsync({format:'PNG',constraint:{type:'SCALE',value},useAbsoluteBounds:topLevel}));
  const large=full>k?await exportAt(full):null;let png=null;
- if(large){const width=pngWidth(large),height=pngHeight(large),fit=(MAX_IMAGE_EDGE-state.rasters.length)/Math.max(width,height);try{png=await shrinkInWindow(large,Math.max(1,Math.round(width*fit)),Math.max(1,Math.round(height*fit)));}catch(error){/* Figma renders the stand-in instead. */}}
+ if(large){const width=pngWidth(large),height=pngHeight(large),fit=(MAX_IMAGE_EDGE-state.rasters.length)/Math.max(width,height);try{png=await timeExport('texture.shrink-transfer',state.run,{frame:state.frame,layer:state.images.length+1,bytes:large.length,width,height},()=>shrinkInWindow(large,Math.max(1,Math.round(width*fit)),Math.max(1,Math.round(height*fit)),state.run));}catch(error){/* Figma renders the stand-in instead. */}}
  if(!png)png=await exportAt(k);
  // Until Figma has decoded a new image it paints the fill as one flat colour, so wait for it and check the PDF later.
- const created=figma.createImage(png),size=await created.getSizeAsync();state.images.push({width:size.width,height:size.height,hash:created.hash});
+ const imageEnd=exportTimer('image.create-size',state.run,{frame:state.frame,layer:state.images.length+1,bytes:png.length});
+ let created,size;try{created=figma.createImage(png);size=await created.getSizeAsync();imageEnd('ok',{width:size.width,height:size.height});}catch(error){imageEnd('error');throw error;}state.images.push({width:size.width,height:size.height,hash:created.hash});
  if(large)state.rasters.push({width:size.width,height:size.height,png:large,ppi,fallbackPpi:Math.round(72*k/state.print)});
  const fill={type:'IMAGE',imageHash:created.hash,scaleMode:'FILL'};
  if(topLevel){for(const child of [...copy.children])child.remove();copy.effects=[];copy.strokes=[];copy.fills=[fill];return ppi;}
@@ -157,13 +167,13 @@ async function rasterise(original,copy,state,topLevel=false) {
 // Returns the PDF, the factor its page must be scaled down by, and full-resolution PNGs for the window to swap in. The copy never touches the original.
 // print is how much a custom page size scales the frame; effects are rendered for that size.
 // A frame with bleed is exported from a copy inside a clipping frame of trim plus bleed, without the bleed layer's guide outline or the trim outline.
-async function exportFrame(node,found,bleed=0,print=1) {
- if(!found.effects&&!bleed)return {pdf:await node.exportAsync({format:'PDF'}),scale:1};
+async function exportFrame(node,found,bleed=0,print=1,run,frame) {
+ if(!found.effects&&!bleed)return {pdf:await timeExport('figma.pdf',run,{frame,fallback:!!found.effects},()=>node.exportAsync({format:'PDF'})),scale:1};
  const outer=shown(node),width=outer.width+2*bleed,height=outer.height+2*bleed;
  const scale=found.effects?Math.min((TARGET_PPI/EFFECT_PPI+0.02)*print,MAX_EFFECT_EDGE/(2*Math.max(width,height))):1;
- let copy=null,wrapper=null,copied=false;
+ let copy=null,wrapper=null,copied=false,cloneEnd=null;
  try{
-  copy=node.clone();
+  cloneEnd=exportTimer('frame.clone-rescale',run,{frame,scale});copy=node.clone();
   if(bleed){
    wrapper=figma.createFrame();wrapper.name=node.name;wrapper.fills=[];wrapper.clipsContent=true;figma.currentPage.appendChild(wrapper);wrapper.resize(width,height);
    wrapper.appendChild(copy);
@@ -171,16 +181,18 @@ async function exportFrame(node,found,bleed=0,print=1) {
    if(!copy.rotation){copy.x=bleed;copy.y=bleed;}
    else{const [[a,c],[b,d]]=copy.relativeTransform,xs=[0,a*node.width,c*node.height,a*node.width+c*node.height],ys=[0,b*node.width,d*node.height,b*node.width+d*node.height];copy.relativeTransform=[[a,c,bleed-Math.min(...xs)],[b,d,bleed-Math.min(...ys)]];}const guide=await bleedLayerOf(copy),trim=await layerOf(copy,trimLayer);if(guide)guide.strokes=[];if(trim)trim.visible=false;
   }else figma.currentPage.appendChild(copy);
-  const target=wrapper||copy;if(scale!==1)target.rescale(scale);copied=true;
-  const state={images:[],rasters:[],print},ppi=found.effects?Math.min(Math.round(EFFECT_PPI*scale/print),found.raster?await rasterise(node,copy,state,true):Infinity):null;
-  let pdf=await target.exportAsync({format:'PDF'});
-  for(let attempt=0;!hasImages(pdf,state.images);attempt++){if(attempt===RETRIES)throw new Error('Figma didn’t finish preparing the image. Try exporting again.');await new Promise(resolve=>setTimeout(resolve,RETRY_MS*(attempt+1)));pdf=await target.exportAsync({format:'PDF'});}
+  const target=wrapper||copy;if(scale!==1)target.rescale(scale);copied=true;cloneEnd();cloneEnd=null;
+  const state={images:[],rasters:[],print,run,frame},ppi=found.effects?Math.min(Math.round(EFFECT_PPI*scale/print),found.raster?await rasterise(node,copy,state,true):Infinity):null;
+  let pdf=await timeExport('figma.pdf',run,{frame,attempt:0},()=>target.exportAsync({format:'PDF'}));
+  const ready=()=>{const end=exportTimer('image.check-pdf',run,{frame,images:state.images.length,bytes:pdf.length}),ok=hasImages(pdf,state.images);end(ok?'ready':'pending');return ok;};
+  for(let attempt=0;!ready();attempt++){if(attempt===RETRIES)throw new Error('Figma didn’t finish preparing the image. Try exporting again.');await timeExport('image.retry-wait',run,{frame,attempt:attempt+1,images:state.images.length},()=>new Promise(resolve=>setTimeout(resolve,RETRY_MS*(attempt+1))));pdf=await timeExport('figma.pdf',run,{frame,attempt:attempt+1},()=>target.exportAsync({format:'PDF'}));}
   return {pdf,scale,ppi,rasters:state.rasters};
  }
  catch(error){
+  if(cloneEnd)cloneEnd('error');
   if(found.raster)throw new Error('Couldn’t render the noise or texture in '+node.name+(copied?': '+(error.message||error):'. Figma needs to make a temporary copy of the frame, so check you can edit this file.'));
   if(bleed)throw new Error('Couldn’t add the bleed to '+node.name+(copied?': '+(error.message||error):'. Figma needs to make a temporary copy of the frame, so check you can edit this file.'));
-  return {pdf:await node.exportAsync({format:'PDF'}),scale:1,ppi:Math.round(EFFECT_PPI/print)};
+  return {pdf:await timeExport('figma.pdf',run,{frame,fallback:!!found.effects},()=>node.exportAsync({format:'PDF'})),scale:1,ppi:Math.round(EFFECT_PPI/print)};
  }
  finally{if(wrapper&&!wrapper.removed)wrapper.remove();else if(copy&&!copy.removed)copy.remove();}
 }
@@ -280,8 +292,8 @@ function schedulePreflight() {
  if(exporting)return;clearTimeout(preflightTimer);
  preflightTimer=setTimeout(()=>{if(!exporting&&figma.currentPage.selection.length)preflight();},500);
 }
-async function runExport(ids,id,prints) {
- const current=()=>id===exportId;
+async function runExport(ids,id,prints,run=id) {
+ let outcome='ok';const current=()=>id===exportId,end=exportTimer('controller.total',run,{frames:Array.isArray(ids)?ids.length:0});
  try {
   if(!Array.isArray(ids)||!ids.length||ids.length>32)throw new Error('Select 1–32 frames or components.');
   const nodes=[];
@@ -289,9 +301,10 @@ async function runExport(ids,id,prints) {
   const issues=[],effects=nodes.map(n=>inspect(n,issues,n));
   if(issues.length){if(current())figma.ui.postMessage({type:'error',text:issues.slice(0,5).map(i=>i.text).join('\n'),issues});return;}
   const pdfs=[],sizes=[],bleeds=[],scales=[],ppi=[],rasters=[];
-  for(let i=0;i<nodes.length;i++){if(!current())return;figma.ui.postMessage({type:'status',text:'Exporting frame '+(i+1)+' of '+nodes.length+'…'});sizes.push(shown(nodes[i]));bleeds.push(await bleedOfNode(nodes[i]));const print=Array.isArray(prints)&&prints[i]>0&&prints[i]<=100?prints[i]:1;const result=await exportFrame(nodes[i],effects[i],bleeds[i],print);pdfs.push(result.pdf);scales.push(result.scale);rasters.push(result.rasters||[]);if(result.ppi)ppi.push(result.ppi);}
-  if(current())figma.ui.postMessage({type:'pdfs',pdfs,sizes,bleeds,scales,rasters,effectPpi:ppi.length?Math.min(...ppi):null});
- }catch(error){if(current())figma.ui.postMessage({type:'error',text:error.message||String(error)});}
+  for(let i=0;i<nodes.length;i++){if(!current())return;figma.ui.postMessage({type:'status',text:'Exporting frame '+(i+1)+' of '+nodes.length+'…'});sizes.push(shown(nodes[i]));bleeds.push(await bleedOfNode(nodes[i]));const print=Array.isArray(prints)&&prints[i]>0&&prints[i]<=100?prints[i]:1;const result=await exportFrame(nodes[i],effects[i],bleeds[i],print,run,i+1);pdfs.push(result.pdf);scales.push(result.scale);rasters.push(result.rasters||[]);if(result.ppi)ppi.push(result.ppi);}
+  if(current())figma.ui.postMessage({type:'pdfs',run,sentAt:Date.now(),pdfs,sizes,bleeds,scales,rasters,effectPpi:ppi.length?Math.min(...ppi):null});
+ }catch(error){outcome='error';if(current())figma.ui.postMessage({type:'error',text:error.message||String(error)});}
+ finally{end(current()?outcome:'cancelled');}
 }
 figma.ui.onmessage=async msg=>{
  if(msg.type==='load-profiles'){try{figma.ui.postMessage({type:'profiles',profiles:await figma.clientStorage.getAsync('open-print-profiles')||{}});}catch(error){figma.ui.postMessage({type:'profiles',profiles:{}});}return;}
@@ -316,5 +329,5 @@ figma.ui.onmessage=async msg=>{
  }
  if(msg.type!=='export')return;
  // Exports run one at a time. Cancel bumps exportId so a running export stops posting, and a new one waits its turn.
- const id=++exportId;exportRun=exportRun.then(async()=>{exporting++;try{await runExport(msg.ids,id,msg.prints);}finally{exporting--;}});await exportRun;
+ const id=++exportId;exportRun=exportRun.then(async()=>{exporting++;try{await runExport(msg.ids,id,msg.prints,msg.run);}finally{exporting--;}});await exportRun;
 };

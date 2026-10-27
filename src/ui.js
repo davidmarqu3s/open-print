@@ -1,3 +1,12 @@
+// Console-only diagnostics: scalar metadata keeps artwork and large buffers out of logs.
+function exportTimer(stage,run,details={}) {
+ const started=Date.now();
+ return (outcome='ok',extra={})=>console.info('[Open Print timing] '+JSON.stringify({run,stage,ms:Date.now()-started,outcome,...details,...extra}));
+}
+async function timeExport(stage,run,details,work) {
+ const end=exportTimer(stage,run,details);
+ try{const result=await work();end();return result;}catch(error){end('error');throw error;}
+}
 const el=id=>document.getElementById(id);let frames=[],profile=null,profileName='',worker=null,busy=false,job=null,profileRead=0,customProfile=null,customName='',engineAbort=null;
 let unit='mm',dimensions={width:null,height:null},autoSize=true,bleedSetting=3,marksEnabled=false,marks={offset:3,length:5,weight:0.25},downloadUrls=[],downloadQueue=null,issues=[],selectionKey='';
 const displayDimension=value=>value===null?'':unit==='in'?Math.round(value/25.4*1e6)/1e6:value;
@@ -188,7 +197,7 @@ el('bleed').onchange=()=>{if(busy||downloadQueue)return;if(allBleed()&&frames.so
 showLengths();
 for(const id of ['width','height'])el(id).oninput=()=>{dimensions[id]=el(id).value===''?null:Number(el(id).value)*(unit==='in'?25.4:1);autoSize=false;clearResult();updateSize();};
 el('profile').onchange=async event=>{const generation=++profileRead;const mode=el('profile-mode').value;try{const file=event.target.files[0];if(!file)return;profile=null;refresh();if(file.size>5*1024*1024)throw new Error('ICC profile is too large.');const bytes=new Uint8Array(await file.arrayBuffer());if(generation!==profileRead)return;PrintCore.validateICC(bytes);const name=PrintCore.profileDescription(bytes);const entry=PROFILE_CATALOG.find(p=>p.id===mode);if(entry && name!==entry.name)throw new Error('Choose '+entry.name+'. This file contains '+(name||'an unnamed profile')+'.');if(entry){const encoded=encodeProfile(bytes);profiles[mode]=encoded;parent.postMessage({pluginMessage:{type:'save-profile',id:mode,encoded}},'*');}else{customProfile=bytes;customName=name||file.name;}chooseProfile();}catch(error){if(generation!==profileRead)return;status(error.message,'error');}refresh();};
-el('export').onclick=()=>{try{const width=dimensions.width,height=dimensions.height;const auto=autoSize;const sizes=auto?frames.map(f=>PrintCore.frameSize(f.width,f.height)):null;if(sizes)for(const size of sizes){PrintCore.points(size.width);PrintCore.points(size.height);}else{PrintCore.points(width);PrintCore.points(height);}stopDownloadQueue();for(const url of downloadUrls)URL.revokeObjectURL(url);downloadUrls=[];job={individual:frames.length>1&&el('export-mode').value!=='combined',filenames:frames.map(f=>f.name+'.pdf'),filename:frames[0].name+'.pdf',width,height,auto,sizes,unit,displayWidth:el('width').value,displayHeight:el('height').value,rgb:rgbOn(),icc:profile&&!rgbOn()?profile.slice():null,name:rgbOn()?'':profileName,marks:marksOn()?{...marks}:null,fits:auto?null:frames.map(fitFor),pureBlack:!rgbOn()&&el('pure-black').checked,pdfx:pdfxOn()};busy=true;refresh();status('Preparing frames…','busy');parent.postMessage({pluginMessage:{type:'export',ids:frames.map(f=>f.id),prints:job.fits?job.fits.map(f=>f.scale):null}},'*');}catch(error){status(error.message,'error');}};
+el('export').onclick=()=>{try{const width=dimensions.width,height=dimensions.height;const auto=autoSize;const sizes=auto?frames.map(f=>PrintCore.frameSize(f.width,f.height)):null;if(sizes)for(const size of sizes){PrintCore.points(size.width);PrintCore.points(size.height);}else{PrintCore.points(width);PrintCore.points(height);}stopDownloadQueue();for(const url of downloadUrls)URL.revokeObjectURL(url);downloadUrls=[];job={run:Date.now().toString(36),started:Date.now(),individual:frames.length>1&&el('export-mode').value!=='combined',filenames:frames.map(f=>f.name+'.pdf'),filename:frames[0].name+'.pdf',width,height,auto,sizes,unit,displayWidth:el('width').value,displayHeight:el('height').value,rgb:rgbOn(),icc:profile&&!rgbOn()?profile.slice():null,name:rgbOn()?'':profileName,marks:marksOn()?{...marks}:null,fits:auto?null:frames.map(fitFor),pureBlack:!rgbOn()&&el('pure-black').checked,pdfx:pdfxOn()};busy=true;refresh();status('Preparing frames…','busy');parent.postMessage({pluginMessage:{type:'export',run:job.run,ids:frames.map(f=>f.id),prints:job.fits?job.fits.map(f=>f.scale):null}},'*');}catch(error){status(error.message,'error');}};
 // Feedback opens a new email to the maintainer, with the version and colour settings below the space for the message.
 const FEEDBACK_EMAIL='d@davidmarqu.es';
 function feedbackUrl(){const settings=['Open Print '+VERSION,rgbOn()?'RGB':'CMYK'+(profileName?', '+profileName:'')];return 'mailto:'+FEEDBACK_EMAIL+'?subject='+encodeURIComponent('Open Print feedback')+'&body='+encodeURIComponent('\n\n\n'+settings.join(' · '));}
@@ -206,37 +215,40 @@ window.onmessage=async event=>{
   updateSize();renderFrames();refresh();}
  // Preflight results replace the last set and are kept per frame, so they can arrive before or after the selection.
  if(msg.type==='preflight'){checks=new Map((msg.frames||[]).map(f=>[f.id,f]));renderPreflight();renderFrames();}
- if(msg.type==='shrink'){let reply;try{reply={png:await shrinkPng(msg.png,msg.width,msg.height)};}catch(error){reply={error:error.message||String(error)};}parent.postMessage({pluginMessage:{type:'shrunk',id:msg.id,...reply}},'*');}
+ if(msg.type==='shrink'){let reply;try{reply={png:await timeExport('texture.shrink',msg.run,{width:msg.width,height:msg.height,bytes:msg.png.length},()=>shrinkPng(msg.png,msg.width,msg.height))};}catch(error){reply={error:error.message||String(error)};}parent.postMessage({pluginMessage:{type:'shrunk',id:msg.id,...reply}},'*');}
  if(msg.type==='status')status(msg.text,'busy');
  if(msg.type==='error'){stop();if(Array.isArray(msg.issues)&&msg.issues.length){issues=msg.issues;renderFrames();const layers=new Set(issues.map(i=>i.nodeId)).size;status((layers===1?'1 layer uses':layers+' layers use')+' an unsupported effect, listed under its frame above. Remove the effect or flatten the layer, then export again.','error');}else status(msg.text,'error');}
- if(msg.type==='pdfs' && job){const current=job;try{current.bleeds=(msg.bleeds||[]).map(px=>px*25.4/72);if(current.auto && msg.sizes)current.sizes=msg.sizes.map(size=>PrintCore.frameSize(size.width,size.height));
+ if(msg.type==='pdfs' && job){const current=job;try{
+  console.info('[Open Print timing] '+JSON.stringify({run:current.run,stage:'pdf.transfer',ms:Date.now()-(msg.sentAt||Date.now()),bytes:msg.pdfs.reduce((n,p)=>n+p.length,0)}));
+  const mergeEnd=exportTimer('pdf.merge',current.run,{frames:msg.pdfs.length});current.bleeds=(msg.bleeds||[]).map(px=>px*25.4/72);if(current.auto && msg.sizes)current.sizes=msg.sizes.map(size=>PrintCore.frameSize(size.width,size.height));
   status('Combining pages…','busy');const merged=await PDFLib.PDFDocument.create();
   const firstPages=[];for(let i=0;i<msg.pdfs.length;i++){const source=await PDFLib.PDFDocument.load(new Uint8Array(msg.pdfs[i])),scale=(msg.scales&&msg.scales[i]||1)/(current.fits?current.fits[i].scale:1);firstPages.push(merged.getPageCount());for(const page of await merged.copyPages(source,source.getPageIndices())){if(scale!==1)page.scale(1/scale,1/scale);merged.addPage(page);}}
+  mergeEnd();
   // Noise and texture bigger than Figma's 4,096 px image limit arrive as full-resolution PNGs. Any that can't be swapped in keep Figma's stand-in, at its lower ppi.
   let effectPpi=msg.effectPpi;
-  for(let i=0;i<(msg.rasters||[]).length;i++)for(const raster of msg.rasters[i]||[]){if(job!==current)return;let swapped=false;try{swapped=PrintCore.replaceImage(merged,merged.getPage(firstPages[i]),raster,await encodeRaster(raster.png));}catch(error){/* Keep the stand-in. */}if(!swapped)effectPpi=Math.min(effectPpi||Infinity,raster.fallbackPpi);}
+  for(let i=0;i<(msg.rasters||[]).length;i++)for(const raster of msg.rasters[i]||[]){if(job!==current)return;let swapped=false;const replaceEnd=exportTimer('pdf.replace-image',current.run,{frame:i+1});try{swapped=PrintCore.replaceImage(merged,merged.getPage(firstPages[i]),raster,await timeExport('texture.encode',current.run,{frame:i+1,bytes:raster.png.length},()=>encodeRaster(raster.png)));}catch(error){/* Keep the stand-in. */}replaceEnd(swapped?'ok':'fallback');if(!swapped)effectPpi=Math.min(effectPpi||Infinity,raster.fallbackPpi);}
   // RGB keeps Figma's own PDF, so it skips the engine and the conversion.
   let converted;
-  if(current.rgb)converted=await merged.save();
+  if(current.rgb)converted=await timeExport('pdf.serialize',current.run,{},()=>merged.save());
   else{
-  if(job!==current)return;status('Loading conversion engine…','busy');const downloadAbort=new AbortController();engineAbort=downloadAbort;refresh();const downloadTimer=setTimeout(()=>downloadAbort.abort(),60000);let wasm;try{wasm=await OpenPrintAssets.loadEngine(downloadAbort.signal,fraction=>{if(job===current)status('Downloading engine… '+Math.floor(fraction*100)+'%','busy');});}finally{clearTimeout(downloadTimer);}if(job!==current)return;engineAbort=null;
-  const convert=bytes=>new Promise((resolve,reject)=>{
+  if(job!==current)return;status('Loading conversion engine…','busy');const downloadAbort=new AbortController();engineAbort=downloadAbort;refresh();const downloadTimer=setTimeout(()=>downloadAbort.abort(),60000);let wasm;try{wasm=await timeExport('engine.load',current.run,{},()=>OpenPrintAssets.loadEngine(downloadAbort.signal,fraction=>{if(job===current)status('Downloading engine… '+Math.floor(fraction*100)+'%','busy');}));}finally{clearTimeout(downloadTimer);}if(job!==current)return;engineAbort=null;
+  const convert=bytes=>timeExport('ghostscript.roundtrip',current.run,{bytes:bytes.length},()=>new Promise((resolve,reject)=>{
    const url=URL.createObjectURL(new Blob([WORKER_SOURCE],{type:'text/javascript'})),w=new Worker(url);URL.revokeObjectURL(url);worker=w;refresh();const engine=wasm.slice();
    w.onerror=event=>reject(new Error('Conversion could not start: '+event.message));
-   w.onmessage=event=>{w.terminate();if(worker===w)worker=null;refresh();if(event.data.error)reject(new Error(event.data.error));else resolve(event.data.bytes);};
+   w.onmessage=event=>{for(const timing of event.data.timings||[])console.info('[Open Print timing] '+JSON.stringify({run:current.run,...timing}));w.terminate();if(worker===w)worker=null;refresh();if(event.data.error)reject(new Error(event.data.error));else resolve(event.data.bytes);};
    w.postMessage({wasm:engine,pdf:bytes,icc:current.icc?current.icc.slice():null,compatibility:current.pdfx?'1.6':'1.7'},[engine.buffer,bytes.buffer]);
-  });
+  }));
   if(current.pureBlack)PrintCore.pureBlack(merged);
   status('Converting colors to CMYK…','busy');
-  await PrintShading.toCMYK(merged,async bytes=>{const output=await convert(bytes);if(job!==current)throw new Error('Conversion cancelled.');return output;});
-  if(job!==current)return;converted=await convert(await merged.save());
+  await timeExport('pdf.shading',current.run,{},()=>PrintShading.toCMYK(merged,async bytes=>{const output=await convert(bytes);if(job!==current)throw new Error('Conversion cancelled.');return output;}));
+  if(job!==current)return;converted=await convert(await timeExport('pdf.serialize',current.run,{},()=>merged.save()));
   }
   if(job!==current)return;
-  const lowest=await PrintCore.imageResolution(converted);if(job!==current)return;
-  status(current.icc?'Setting print size and embedding profile…':'Setting print size…','busy');const outputs=await prepareDownloads(converted,current);if(job!==current)return;stop();showDownloads(outputs);
+  const lowest=await timeExport('pdf.image-resolution',current.run,{bytes:converted.length},()=>PrintCore.imageResolution(converted));if(job!==current)return;
+  status(current.icc?'Setting print size and embedding profile…':'Setting print size…','busy');const outputs=await timeExport('pdf.finalize',current.run,{},()=>prepareDownloads(converted,current));if(job!==current)return;console.info('[Open Print timing] '+JSON.stringify({run:current.run,stage:'export.ready',ms:Date.now()-current.started,bytes:outputs.reduce((n,o)=>n+o.bytes.length,0)}));stop();showDownloads(outputs,current.run);
   if(effectPpi&&effectPpi<300){const note=document.createElement('span');note.className='note';note.textContent='Effects are '+effectPpi+' ppi, below the 300 ppi print target.';el('status').append(note);}
   if(lowest&&lowest.ppi<300){const note=document.createElement('span');note.className='note';note.textContent='Some images are as low as '+lowest.ppi+' ppi'+(lowest.pages>1?' on page '+lowest.page:'')+', below the 300 ppi print target.';el('status').append(note);}
- }catch(error){if(job!==current)return;stop();status(error.message,'error');}}
+ }catch(error){if(job!==current)return;console.info('[Open Print timing] '+JSON.stringify({run:current.run,stage:'export.failed',ms:Date.now()-current.started,outcome:'error'}));stop();status(error.message,'error');}}
  };
 // Resizes a PNG for Figma's stand-in image, with the browser's high-quality resampling.
 async function shrinkPng(png,width,height){
@@ -266,28 +278,28 @@ function stopDownloadQueue(){
  window.removeEventListener('blur',q.blur);window.removeEventListener('focus',q.focus);refresh();
  parent.postMessage({pluginMessage:{type:'ready'}},'*');
 }
-function startDownloadQueue(anchors,message){
+function startDownloadQueue(anchors,message,run){
  stopDownloadQueue();const q={anchors,message,next:0,phase:'waiting',blurred:false,timer:null,watchdog:null};downloadQueue=q;
  const finish=(text,tone)=>{stopDownloadQueue();message.textContent=text;el('status').className=tone;};
  const request=()=>{
   if(downloadQueue!==q)return;
-  q.phase='waiting';q.blurred=false;
+  q.phase='waiting';q.blurred=false;q.saveEnd=exportTimer('save.dialog',run,{file:q.next+1});
   message.textContent='Choose where to save PDF '+(q.next+1)+' of '+anchors.length+'. Cancel skips this file.';el('status').className='queue';
   // Desktop Figma drops overlapping Save dialogs. Wait for blur then focus before requesting another.
-  q.watchdog=setTimeout(()=>{if(downloadQueue===q&&!q.blurred)finish('Automatic downloads paused. Please export again.','error');},3000);
+  q.watchdog=setTimeout(()=>{if(downloadQueue===q&&!q.blurred){q.saveEnd('no-blur');finish('Automatic downloads paused. Please export again.','error');}},3000);
   anchors[q.next++].click();
  };
  q.blur=()=>{if(downloadQueue===q&&q.phase==='waiting'){q.blurred=true;clearTimeout(q.watchdog);}};
  q.focus=()=>{
   if(downloadQueue!==q||q.phase!=='waiting'||!q.blurred)return;
-  q.phase='delay';q.blurred=false;clearTimeout(q.watchdog);
+  q.saveEnd('focus-returned');q.phase='delay';q.blurred=false;clearTimeout(q.watchdog);
   if(q.next===anchors.length){finish('All '+anchors.length+' PDFs sent to save. Check your destination folder.','done');return;}
   message.textContent='Next PDF in a moment.';
   q.timer=setTimeout(()=>{if(downloadQueue!==q)return;if(document.hasFocus())request();else{q.phase='waiting';q.blurred=true;}},1000);
  };
  window.addEventListener('blur',q.blur);window.addEventListener('focus',q.focus);refresh();request();
 }
-function showDownloads(outputs){
+function showDownloads(outputs,run){
  stopDownloadQueue();
  if(outputs.length>1){
   const links=document.createElement('div');links.className='downloads';links.hidden=true;const used=new Set(),anchors=[];
@@ -300,7 +312,7 @@ function showDownloads(outputs){
   }
   const message=document.createElement('span');
   el('status').replaceChildren(message,links);el('status').className='queue';
-  startDownloadQueue(anchors,message);return anchors;
+  startDownloadQueue(anchors,message,run);return anchors;
  }
 
  const output=outputs[0],links=document.createElement('div');links.className='downloads';links.hidden=true;
@@ -308,7 +320,7 @@ function showDownloads(outputs){
  a.href=url;a.download=output.filename;a.textContent='Save PDF';links.append(a);downloadUrls.push(url);
  const message=document.createElement('span');message.textContent=output.filename+' is ready.';
  el('status').replaceChildren(message,links);el('status').className='done';
- a.click();return [a];
+ const saveEnd=exportTimer('save.request',run,{bytes:output.bytes.length});a.click();saveEnd();return [a];
 }
 async function prepareDownloads(bytes,current){
  if(!current.individual)return [{filename:current.filename,bytes:await PrintCore.finish(bytes,current.icc,current.width,current.height,current.name,current.sizes,{bleeds:current.bleeds,fits:current.fits,marks:current.marks,pdfx:current.pdfx,rgb:current.rgb,title:current.filename.replace(/\.pdf$/,'')})}];
