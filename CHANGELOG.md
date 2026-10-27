@@ -4,6 +4,13 @@ Notable changes to Open Print. Each release’s notes are also used on GitHub Re
 
 ## Unreleased
 
+## 0.2.1 – 27 October 2026
+
+- Improved consecutive PDF saving when Save dialogs open slowly or an export finishes while Figma is unfocused.
+- Fixed a case where cancelling during texture preparation blocked subsequent exports.
+- Reduced processing time and memory use when preparing individual PDFs, with unchanged print quality.
+- Clarified the total page size, including bleed and crop marks.
+
 ## 0.2.0 – 27 October 2026
 
 - RGB export: switch Color to RGB for a PDF in Figma’s own colours, with the same page size, bleed and crop marks.
