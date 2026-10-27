@@ -4,7 +4,7 @@ const PAPER_FRAMES={'A0':[841,1189],'A1':[594,841],'A2':[420,594],'A3':[297,420]
 // With frames or components selected, it resizes them instead, from their top left, keeping each one landscape or portrait. Bleed and trim layers stretch with them.
 function newPaperFrame(name) {
  const mm=Object.prototype.hasOwnProperty.call(PAPER_FRAMES,name)?PAPER_FRAMES[name]:null;if(!mm)return;
- const [width,height]=mm.map(v=>Math.round(v*72/25.4)),selected=figma.currentPage.selection.filter(n=>PRINTABLE.includes(n.type));
+ const [width,height]=mm.map(v=>Math.round(v*72/25.4)),selected=printableSelection().filter(n=>PRINTABLE.includes(n.type));
  if(selected.length){for(const n of selected){const landscape=n.width>n.height,[w,h]=landscape===(width>height)?[width,height]:[height,width];n.resize(w,h);}return;}
  const view=figma.viewport.bounds,frame=figma.createFrame();
  frame.name=name;frame.resize(width,height);frame.x=Math.round(figma.viewport.center.x-width/2);frame.y=Math.round(figma.viewport.center.y-height/2);
@@ -24,6 +24,8 @@ const trimLayer=frame=>(frame.children||[]).find(c=>typeof c.getPluginData==='fu
 const bleedOf=frame=>{const layer=bleedLayer(frame),bleed=layer?Number(layer.getPluginData(BLEED_KEY)):0;return Number.isFinite(bleed)&&bleed>0?bleed:0;};
 // Frames, components and instances export. Instances can't take new layers, so they show their main component's bleed instead of their own.
 const PRINTABLE=['FRAME','COMPONENT','INSTANCE'];
+// A selected component set stands for its variants, each exported as a page of its own.
+const printableSelection=()=>figma.currentPage.selection.flatMap(n=>n.type==='COMPONENT_SET'?n.children.filter(c=>c.type==='COMPONENT'):[n]);
 // An instance's layers match its main component's one for one, so its bleed and trim layers sit where the main component's do.
 async function layerOf(node,find) {
  if(node.type!=='INSTANCE')return find(node);
@@ -45,16 +47,17 @@ function shown(n) {
  const [[a,c],[b,d]]=n.relativeTransform,round=v=>Math.round(v*1e4)/1e4;
  return {width:round(Math.abs(a)*n.width+Math.abs(c)*n.height),height:round(Math.abs(b)*n.width+Math.abs(d)*n.height)};
 }
-// The main component is offered as the place to add bleed, unless it comes from a library.
+// The main component is offered as the place to add bleed, unless it comes from a library. A variant is named after its set too, so its PDF says what it is.
 async function describe(n) {
- const item={id:n.id,name:n.name,...shown(n),type:n.type,bleed:0};
+ const name=n.type==='COMPONENT'&&n.parent&&n.parent.type==='COMPONENT_SET'?n.parent.name+', '+n.name:n.name;
+ const item={id:n.id,name,...shown(n),type:n.type,bleed:0};
  if(!PRINTABLE.includes(n.type))return item;
  try{item.bleed=await bleedOfNode(n);if(n.type==='INSTANCE'){const main=await n.getMainComponentAsync();if(main&&!main.remote)item.mainId=main.id;}}catch(error){/* Show the node without bleed. */}
  return item;
 }
 // Selection changes can overlap while main components load, so only the latest one is posted.
 let selectionId=0;
-async function selection() { const id=++selectionId,frames=await Promise.all(figma.currentPage.selection.map(describe));if(id===selectionId){figma.ui.postMessage({type:'selection',frames});await preflight();} }
+async function selection() { const id=++selectionId,frames=await Promise.all(printableSelection().map(describe));if(id===selectionId){figma.ui.postMessage({type:'selection',frames});await preflight();} }
 // Layers added to a frame land above its trim outline, so the outline moves back on top. Instances follow their main component.
 function keepTrimOnTop(frame) {
  if(!frame||frame.removed||frame.type==='INSTANCE'||!PRINTABLE.includes(frame.type))return;
@@ -244,7 +247,7 @@ async function preflightFrame(frame) {
 let preflightId=0,preflightTimer=null,exporting=0;
 async function preflight() {
  const id=++preflightId,frames=[];
- for(const node of figma.currentPage.selection){if(!PRINTABLE.includes(node.type))continue;try{frames.push(await preflightFrame(node));}catch(error){/* The frame changed mid-check; the next change runs it again. */}if(id!==preflightId)return;}
+ for(const node of printableSelection()){if(!PRINTABLE.includes(node.type))continue;try{frames.push(await preflightFrame(node));}catch(error){/* The frame changed mid-check; the next change runs it again. */}if(id!==preflightId)return;}
  figma.ui.postMessage({type:'preflight',frames});
 }
 // Edits re-run preflight once they settle.

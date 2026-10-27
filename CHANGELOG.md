@@ -4,6 +4,9 @@ Notable changes to Open Print. Each release’s notes are also used on GitHub Re
 
 ## Unreleased
 
+- Select a component set to export each of its variants as its own page.
+- Export RGB PDFs, with the same page size, bleed and crop marks, by switching Color to RGB.
+
 ## 0.1.0 – 7 October 2026
 
 First public release.

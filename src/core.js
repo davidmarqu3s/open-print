@@ -311,7 +311,7 @@ var PrintCore = {
   doc.catalog.delete(PDFName.of('Version'));
  },
  // options.bleeds: each page's bleed in mm, already exported around the artwork. options.marks: crop marks, or null.
- // options.pdfx: mark the file PDF/X-4, titled options.title.
+ // options.pdfx: mark the file PDF/X-4, titled options.title. options.rgb: Figma's own RGB PDF, not converted by Ghostscript.
  async finish(bytes,icc,width,height,profileName,pageSizes,options={}) {
   if(icc) this.validateICC(icc);
   const {PDFDocument,PDFName,PDFString}=PDFLib;
@@ -345,7 +345,7 @@ var PrintCore = {
   const intent=doc.context.register(doc.context.obj({Type:'OutputIntent',S:'GTS_PDFX',OutputConditionIdentifier:PDFString.of(profileName),Info:PDFString.of(profileName),DestOutputProfile:profile}));
   doc.catalog.set(PDFName.of('OutputIntents'),doc.context.obj([intent]));
   }
-  doc.setProducer('Open Print · Ghostscript + pdf-lib');
+  doc.setProducer(options.rgb?'Open Print · pdf-lib':'Open Print · Ghostscript + pdf-lib');
   if(!options.pdfx)return doc.save();
   if(!icc)throw new Error('PDF/X-4 needs a colour profile.');
   this.markPDFX4(doc,options.title||'Untitled');
