@@ -58,7 +58,7 @@ function sheetHint(){
  if(!valid.length||(!marksOn()&&bleeds.every(b=>!b)))return '';
  if(dimensions.width===null||dimensions.height===null||bleeds.length>1||marksProblem()||scaleProblem().text)return '';
  const margin=PrintCore.margin(bleeds[0],marksOn()?marks:null),round=v=>Math.round(v*100)/100;
- return 'PDF page '+formatSize({width:round(dimensions.width+2*margin),height:round(dimensions.height+2*margin)})+(marksOn()?' with crop marks.':' with bleed.');
+ return 'Total page size: '+formatSize({width:round(dimensions.width+2*margin),height:round(dimensions.height+2*margin)});
 }
 // Truncate in the middle so names that share a long prefix stay distinguishable. The kept end starts at a word.
 const NAME_TAIL=14;
