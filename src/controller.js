@@ -284,6 +284,7 @@ figma.ui.onmessage=async msg=>{
  if(msg.type==='select-layer'){try{const node=await figma.getNodeByIdAsync(String(msg.id));let page=node;while(page&&page.type!=='PAGE')page=page.parent;if(!node||!page)return;if(page!==figma.currentPage)await figma.setCurrentPageAsync(page);figma.currentPage.selection=[node];figma.viewport.scrollAndZoomIntoView([node]);}catch(error){/* The layer was deleted. */}return;}
  if(msg.type==='new-frame'){try{newPaperFrame(String(msg.size));}catch(error){figma.ui.postMessage({type:'error',text:error.message||String(error)});}await selection();return;}
  if(msg.type==='cancel'){exportId++;return;}
+ if(msg.type==='open-feedback'){if(typeof msg.url==='string'&&msg.url.startsWith('mailto:'))figma.openExternal(msg.url);return;}
  if(msg.type==='show-bleed'||msg.type==='hide-bleed'){
   try{
    const bleed=Number(msg.bleed);if(msg.type==='show-bleed'&&!(bleed>0&&bleed<=1000))throw new Error('Enter a bleed between 0 and 1000 units.');

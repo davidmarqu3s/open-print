@@ -39,6 +39,7 @@ li.issue .name{color:var(--danger)}
 li.issue.more{color:var(--text2)}
 .link{height:auto;padding:0;background:none;color:var(--figma-color-text-brand,#007be5);font-weight:550}
 .link:hover{text-decoration:underline}
+.feedback{margin:0;padding:8px 16px 16px}
 input,select,button{font:inherit;letter-spacing:inherit;color:inherit}
 .field{position:relative;display:flex;align-items:center;height:24px;border:1px solid transparent;border-radius:5px;background:var(--bg2)}
 .field:hover{border-color:var(--border)}
@@ -150,6 +151,7 @@ li.issue.warning,li.issue.warning .name{color:var(--warning)}
 <label class="check below" title="Pure black (#000000) text and shapes print in black ink only and overprint, like InDesign’s [Black], so small type stays sharp. Use a near-black such as #0A0A0A for rich black."><input id="pure-black" type="checkbox" checked><span>Pure black as 100% K</span></label>
 <label class="check" title="The print standard most printers ask for. Needs a color profile."><input id="pdfx" type="checkbox" checked><span>PDF/X-4</span></label>
 <p class="hint" id="pdfx-hint"></p></div></section>
+<p class="feedback"><button id="feedback" class="link">Send feedback</button></p>
 </main>
 <footer><div class="option" id="preflight" hidden><span id="preflight-summary" class="preflight-summary"></span><button id="preflight-toggle" class="link">Show</button></div><div class="option" id="export-options" hidden><label for="export-mode">Export as</label><select id="export-mode" class="compact" aria-label="Export as"><option value="combined">One multipage PDF</option><option value="separate">Individual PDFs</option></select></div><div class="send"><div id="status" role="status"></div><div id="export-hint"></div><div class="actions"><button id="cancel" class="secondary" hidden>Cancel</button><button id="export" class="primary" disabled>Export CMYK PDF</button></div></div></footer><svg id="resize-grip" viewBox="0 0 16 16" fill="none" stroke="currentColor" aria-hidden="true"><path d="M12.5 7.5l-5 5M12.5 10.5l-2 2"/></svg>
 <script>/*BUNDLE*/</script></body></html>

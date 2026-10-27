@@ -104,3 +104,4 @@ test('a full-resolution image replaces the one stand-in of its exact size, insid
  const twins=await build([[4096,4096],[4096,4096]]);assert.equal(ctx.PrintCore.replaceImage(twins.doc,twins.page,{width:4096,height:4096},image),false);
  const none=await build([[100,100]]);assert.equal(ctx.PrintCore.replaceImage(none.doc,none.page,{width:4096,height:4096},image),false);
 });
+test('feedback opens only mailto links outside Figma',async()=>{const {figma}=controller([]);const opened=[];figma.openExternal=url=>opened.push(url);await figma.ui.onmessage({type:'open-feedback',url:'mailto:d@davidmarqu.es'});await figma.ui.onmessage({type:'open-feedback',url:'https://example.com'});assert.deepEqual(opened,['mailto:d@davidmarqu.es']);});

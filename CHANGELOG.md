@@ -7,6 +7,7 @@ Notable changes to Open Print. Each release’s notes are also used on GitHub Re
 - Select a component set to export each of its variants as its own page.
 - Export RGB PDFs, with the same page size, bleed and crop marks, by switching Color to RGB.
 - Noise and texture larger than about 347 mm now reach 300 ppi, up to 8,192 px on the longest side, instead of stopping at Figma’s 4,096 px image limit.
+- Send feedback by email from the plugin window.
 - Fixed a noise or texture layer exporting as a flat colour when a frame has two of the same shape.
 
 ## 0.1.0 – 7 October 2026
