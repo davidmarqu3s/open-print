@@ -141,7 +141,7 @@ var PrintCore = {
  // Lowest effective resolution of any raster image at final print size, following each Do through q/Q/cm and Form matrices.
  // Swaps Figma's stand-in for a full-resolution image: the one image XObject on the page of exactly size.width × size.height,
  // found through form XObjects and patterns. image is {width,height,jpeg,alpha}, alpha one byte per pixel or null.
- // The stand-in's colour space is kept. Returns false, changing nothing, unless exactly one image matches.
+ // The stand-in's colour space is kept, and the stand-in is removed from the file. Returns false, changing nothing, unless exactly one image matches.
  replaceImage(doc,page,size,image) {
   const {PDFName,PDFDict,PDFRef,PDFNumber,PDFStream,PDFRawStream}=PDFLib,context=doc.context,matches=[],seen=new Set();
   const number=(dict,key)=>{const n=dict.lookup(PDFName.of(key));return n instanceof PDFNumber?n.asNumber():NaN;};
@@ -164,6 +164,8 @@ var PrintCore = {
   replacement.dict.set(PDFName.of('ColorSpace'),space||PDFName.of('DeviceRGB'));
   if(image.alpha)replacement.dict.set(PDFName.of('SMask'),context.register(context.flateStream(image.alpha,{Type:'XObject',Subtype:'Image',Width:image.width,Height:image.height,ColorSpace:'DeviceGray',BitsPerComponent:8})));
   const ref=context.register(replacement);for(const m of matches)m.dict.set(m.name,ref);
+  // pdf-lib saves every object it holds, used or not, so the stand-in and its mask are deleted rather than left as dead weight.
+  const mask=matches[0].stream.dict.get(PDFName.of('SMask'));if(mask instanceof PDFRef)context.delete(mask);context.delete(matches[0].value);
   return true;
  },
  async imageResolution(bytes) {

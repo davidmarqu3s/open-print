@@ -245,14 +245,17 @@ async function shrinkPng(png,width,height){
  const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/png'));if(!blob)throw new Error('Couldn’t resize the image.');
  return new Uint8Array(await blob.arrayBuffer());
 }
-// Splits a PNG into JPEG colour and an alpha mask, the way Figma embeds images. The colour is drawn opaque, so the JPEG keeps each pixel's own colour.
+// Splits a PNG into JPEG colour and an alpha mask, the way Figma embeds images, at Figma's JPEG quality of about 76. The colour is drawn opaque, so the JPEG keeps each pixel's own colour.
 async function encodeRaster(png){
  const bitmap=await createImageBitmap(new Blob([png],{type:'image/png'})),width=bitmap.width,height=bitmap.height,canvas=document.createElement('canvas');
  canvas.width=width;canvas.height=height;const context=canvas.getContext('2d');context.drawImage(bitmap,0,0);bitmap.close();
  const pixels=context.getImageData(0,0,width,height),data=pixels.data;let alpha=null;
  for(let i=3;i<data.length;i+=4)if(data[i]!==255){alpha=new Uint8Array(width*height);break;}
- if(alpha){for(let i=0;i<alpha.length;i++){alpha[i]=data[i*4+3];data[i*4+3]=255;}context.putImageData(pixels,0,0);}
- const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/jpeg',0.92));if(!blob)throw new Error('Couldn’t encode the image.');
+ // A fully transparent pixel reads back black but never shows, so it takes the colour of the last visible pixel before it, or of the first one for pixels before any.
+ // Grain over a flat colour then compresses to a fraction of the size, and no black bleeds into visible pixels.
+ if(alpha){let first=3;while(first<data.length&&!data[first])first+=4;let r=data[first-3]||0,g=data[first-2]||0,b=data[first-1]||0;
+  for(let i=0;i<alpha.length;i++){const k=i*4;alpha[i]=data[k+3];if(alpha[i]){r=data[k];g=data[k+1];b=data[k+2];}else{data[k]=r;data[k+1]=g;data[k+2]=b;}data[k+3]=255;}context.putImageData(pixels,0,0);}
+ const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/jpeg',0.76));if(!blob)throw new Error('Couldn’t encode the image.');
  return {width,height,jpeg:new Uint8Array(await blob.arrayBuffer()),alpha};
 }
 function stopDownloadQueue(){

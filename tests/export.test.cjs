@@ -105,7 +105,7 @@ test('a full-resolution image replaces the one stand-in of its exact size, insid
  const xobjects=doc.context.lookup(form).dict.lookup(PDFName.of('Resources'),PDFDict).lookup(PDFName.of('XObject'),PDFDict),swapped=xobjects.lookup(PDFName.of('Im0'));
  assert.equal(swapped.dict.lookup(PDFName.of('Width')).asNumber(),8000);assert.equal(swapped.dict.get(PDFName.of('Filter')),PDFName.of('DCTDecode'));assert.equal(swapped.dict.get(PDFName.of('ColorSpace')),space);assert(swapped.dict.get(PDFName.of('SMask')));
  assert.equal(xobjects.lookup(PDFName.of('Im1')).dict.lookup(PDFName.of('Width')).asNumber(),100);
- await PDFLib.PDFDocument.load(await doc.save());
+ const saved=await doc.save();await PDFLib.PDFDocument.load(saved);assert(!Buffer.from(saved).toString('latin1').includes('/Width 4096'),'the stand-in is removed');
  const twins=await build([[4096,4096],[4096,4096]]);assert.equal(ctx.PrintCore.replaceImage(twins.doc,twins.page,{width:4096,height:4096},image),false);
  const none=await build([[100,100]]);assert.equal(ctx.PrintCore.replaceImage(none.doc,none.page,{width:4096,height:4096},image),false);
 });
