@@ -95,10 +95,17 @@ const pngWidth=png=>(png[16]<<24|png[17]<<16|png[18]<<8|png[19])>>>0,pngHeight=p
 // The window resizes PNGs, because the plugin sandbox can't decode images. Each request waits for its own reply.
 let shrinkId=0;const shrinking=new Map();
 function shrinkInWindow(png,width,height){const id=++shrinkId;return new Promise((resolve,reject)=>{shrinking.set(id,{resolve,reject});figma.ui.postMessage({type:'shrink',id,png,width,height});});}
+// Where the copy draws what the original draws inside bounds. Effects that reach past a layer, like texture, don't all grow when the copy is rescaled,
+// so the copy's own render bounds can be too small for the PNG; the original's, scaled by the copy's size, are not.
+function placeLike(original,copy,bounds) {
+ const box=original.absoluteBoundingBox,to=copy.absoluteBoundingBox;if(!bounds||!box||!to)return null;
+ const sx=box.width?to.width/box.width:to.height/box.height,sy=box.height?to.height/box.height:sx;
+ return {x:to.x+(bounds.x-box.x)*sx,y:to.y+(bounds.y-box.y)*sy,width:bounds.width*sx,height:bounds.height*sy};
+}
 // Covers the copied layer with a PNG of the original and hides the copy, keeping its place in any auto layout. Returns the image's ppi at print size.
 async function swapForImage(original,copy,topLevel,state) {
  // state.print is how much the page is scaled for a custom page size, so the image reaches 300 ppi at the size it prints.
- const bounds=topLevel?original.absoluteBoundingBox:original.absoluteRenderBounds,target=topLevel?copy.absoluteBoundingBox:copy.absoluteRenderBounds;
+ const bounds=topLevel?original.absoluteBoundingBox:original.absoluteRenderBounds,target=topLevel?copy.absoluteBoundingBox:placeLike(original,copy,bounds);
  if(!bounds||!target||!bounds.width||!bounds.height)return Infinity;
  const edge=Math.max(bounds.width,bounds.height),full=Math.min(TARGET_PPI*state.print/72,MAX_RASTER_EDGE/edge);
  // Each stand-in in a frame is a pixel smaller than the last, so the window can tell them apart in Figma's PDF.

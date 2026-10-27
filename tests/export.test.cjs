@@ -34,12 +34,12 @@ test('show-layer zooms to the layer without selecting it',async()=>{const layer=
 // A small node tree for the noise and texture tests. Copies live 2x larger so the test can tell original and copy bounds apart.
 // 24 bytes is enough for the PNG header's width and height.
 function fakePng(width,height){const b=new Uint8Array(24),v=new DataView(b.buffer);v.setUint32(16,width);v.setUint32(20,height);return b;}
-function rasterTree({frameEffects=[],childEffects=[{type:'NOISE',visible:true}],childType='RECTANGLE',inInstance=false,size=100,cloneFails=false,placeholderExports=0,shrinkFails=false}={}){
+function rasterTree({frameEffects=[],childEffects=[{type:'NOISE',visible:true}],childType='RECTANGLE',inInstance=false,size=100,cloneFails=false,placeholderExports=0,shrinkFails=false,overflow=0}={}){
  const log={pngs:[],images:0,detached:0,inserted:[]};
  const box=(x,y,w,h)=>({x,y,width:w,height:h});
  function node(props,k){const n={visible:true,effects:[],opacity:1,blendMode:'NORMAL',relativeTransform:[[1,0,10*k],[0,1,10*k]],absoluteTransform:[[1,0,10*k],[0,1,10*k]],...props};if(n.children)for(const c of n.children)c.parent=n;n.insertChild=(i,c)=>{n.children.splice(i,0,c);c.parent=n;log.inserted.push(c);};n.remove=()=>{const s=n.parent.children;s.splice(s.indexOf(n),1);};return n;}
  function tree(k){
-  const leaf=node({id:'5',type:childType,name:'Grain',effects:childEffects,absoluteRenderBounds:box(10*k,10*k,size*k,size*k),absoluteBoundingBox:box(10*k,10*k,size*k,size*k),exportAsync:async o=>{log.pngs.push({who:k,...o});return fakePng(Math.round(size*o.constraint.value),Math.round(size*o.constraint.value));}},k);
+  const leaf=node({id:'5',type:childType,name:'Grain',effects:childEffects,absoluteRenderBounds:box(10*k-overflow,10*k-overflow,size*k+2*overflow,size*k+2*overflow),absoluteBoundingBox:box(10*k,10*k,size*k,size*k),exportAsync:async o=>{log.pngs.push({who:k,...o});return fakePng(Math.round(size*o.constraint.value),Math.round(size*o.constraint.value));}},k);
   const above=node({id:'6',type:'TEXT',name:'Title'},k);
   let holder=node({id:'4',type:inInstance?'INSTANCE':'FRAME',name:'Card',children:[leaf,above],layoutMode:'VERTICAL'},k);
   if(inInstance)holder.detachInstance=()=>{log.detached++;holder.type='FRAME';return holder;};
@@ -110,3 +110,4 @@ test('a full-resolution image replaces the one stand-in of its exact size, insid
  const none=await build([[100,100]]);assert.equal(ctx.PrintCore.replaceImage(none.doc,none.page,{width:4096,height:4096},image),false);
 });
 test('feedback opens only mailto links outside Figma',async()=>{const {figma}=controller([]);const opened=[];figma.openExternal=url=>opened.push(url);await figma.ui.onmessage({type:'open-feedback',url:'mailto:d@davidmarqu.es'});await figma.ui.onmessage({type:'open-feedback',url:'https://example.com'});assert.deepEqual(opened,['mailto:d@davidmarqu.es']);});
+test('an image covers the scaled copy of everything the layer draws, even effect overflow the copy didn\u2019t scale',async()=>{const {log,figma,messages}=rasterTree({overflow:50});await figma.ui.onmessage({type:'export',ids:['1']});assert.equal(messages.at(-1).type,'pdfs',messages.at(-1).text);const image=log.inserted.find(n=>n.type==='RECTANGLE');assert.deepEqual(image.size,[(100+100)*2,(100+100)*2]);assert.deepEqual(JSON.parse(JSON.stringify(image.relativeTransform)),[[1,0,20-100],[0,1,20-100]]);});

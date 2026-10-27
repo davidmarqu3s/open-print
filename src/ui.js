@@ -251,10 +251,12 @@ async function encodeRaster(png){
  canvas.width=width;canvas.height=height;const context=canvas.getContext('2d');context.drawImage(bitmap,0,0);bitmap.close();
  const pixels=context.getImageData(0,0,width,height),data=pixels.data;let alpha=null;
  for(let i=3;i<data.length;i+=4)if(data[i]!==255){alpha=new Uint8Array(width*height);break;}
- // A fully transparent pixel reads back black but never shows, so it takes the colour of the last visible pixel before it, or of the first one for pixels before any.
- // Grain over a flat colour then compresses to a fraction of the size, and no black bleeds into visible pixels.
- if(alpha){let first=3;while(first<data.length&&!data[first])first+=4;let r=data[first-3]||0,g=data[first-2]||0,b=data[first-1]||0;
-  for(let i=0;i<alpha.length;i++){const k=i*4;alpha[i]=data[k+3];if(alpha[i]){r=data[k];g=data[k+1];b=data[k+2];}else{data[k]=r;data[k+1]=g;data[k+2]=b;}data[k+3]=255;}context.putImageData(pixels,0,0);}
+ // The canvas stores colour multiplied by alpha, so a transparent pixel reads back black and a nearly transparent one, under 16, reads back
+ // a colour 8 or more levels out. Those take the colour of the last reliable pixel before them, or of the first one for pixels before any.
+ // Grain over a flat colour then compresses to a fraction of the size, with no black or stray colour bleeding into what shows.
+ const RELIABLE=16;
+ if(alpha){let first=3;while(first<data.length&&data[first]<RELIABLE)first+=4;let r=data[first-3]||0,g=data[first-2]||0,b=data[first-1]||0;
+  for(let i=0;i<alpha.length;i++){const k=i*4;alpha[i]=data[k+3];if(alpha[i]>=RELIABLE){r=data[k];g=data[k+1];b=data[k+2];}else{data[k]=r;data[k+1]=g;data[k+2]=b;}data[k+3]=255;}context.putImageData(pixels,0,0);}
  const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/jpeg',0.76));if(!blob)throw new Error('Couldn’t encode the image.');
  return {width,height,jpeg:new Uint8Array(await blob.arrayBuffer()),alpha};
 }
