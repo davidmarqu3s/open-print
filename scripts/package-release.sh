@@ -1,10 +1,9 @@
 #!/usr/bin/env bash
 # Builds the two release zips in release/: the plugin and the Ghostscript corresponding source.
 # Run after `npm run build`. Usage: scripts/package-release.sh 0.1.0
-# Pass `latest` instead of a version for the rolling build: open-print-latest.zip.
 set -euo pipefail
 version="$1"
-if [ "$version" = latest ]; then name='open-print-latest'; else name="open-print-v$version"; fi
+name="open-print-v$version"
 gs_url='https://github.com/ArtifexSoftware/ghostpdl-downloads/releases/download/gs10071/ghostscript-10.07.1.tar.gz'
 gs_sha256='2fc74362f9be6fae1b0a65d38fdcfd4f0b518cc3b07c5581fb661eb4d2e15251'
 
