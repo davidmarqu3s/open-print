@@ -96,7 +96,7 @@ async function swapForImage(original,copy,topLevel,state) {
  const k=Math.min(TARGET_PPI*state.print/72,MAX_IMAGE_EDGE/Math.max(bounds.width,bounds.height));
  const png=await original.exportAsync({format:'PNG',constraint:{type:'SCALE',value:k},useAbsoluteBounds:topLevel});
  // Until Figma has decoded a new image it paints the fill as one flat colour, so wait for it and check the PDF later.
- const created=figma.createImage(png),size=await created.getSizeAsync();state.images.push(size);
+ const created=figma.createImage(png),size=await created.getSizeAsync();state.images.push({width:size.width,height:size.height,hash:created.hash});
  const fill={type:'IMAGE',imageHash:created.hash,scaleMode:'FILL'};
  if(topLevel){for(const child of [...copy.children])child.remove();copy.effects=[];copy.strokes=[];copy.fills=[fill];return Math.round(72*k/state.print);}
  const image=figma.createRectangle(),parent=copy.parent;
@@ -117,8 +117,9 @@ function hasImages(pdf,expected) {
  let text='';// Figma's sandbox allows at most 65,534 arguments per call, so read the bytes in small chunks.
  for(let i=0;i<pdf.length;i+=8192)text+=String.fromCharCode.apply(null,pdf.subarray(i,i+8192));
  const found=(text.match(/<<[^<>]*\/Subtype\s*\/Image[^<>]*>>/g)||[]).map(d=>[Number((d.match(/\/Width\s+(\d+)/)||[])[1]),Number((d.match(/\/Height\s+(\d+)/)||[])[1])]);
- // Matching the aspect ratio still passes if Figma resamples the image.
- return expected.every(size=>found.some(([w,h])=>w&&h&&Math.abs(w/h-size.width/size.height)<0.01*size.width/size.height));
+ // Matching the aspect ratio still passes if Figma resamples the image. Each distinct image needs an image of its own, so one square image can't stand in for two.
+ const unused=found.slice();
+ return [...new Map(expected.map(size=>[size.hash,size])).values()].every(size=>{const i=unused.findIndex(([w,h])=>w&&h&&Math.abs(w/h-size.width/size.height)<0.01*size.width/size.height);if(i<0)return false;unused.splice(i,1);return true;});
 }
 // Walks the original and its copy together. Instances in the copy are detached first, because layers can't be added inside them.
 async function rasterise(original,copy,state,topLevel=false) {
