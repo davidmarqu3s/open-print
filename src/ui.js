@@ -274,30 +274,36 @@ async function encodeRaster(png){
 }
 function stopDownloadQueue(){
  const q=downloadQueue;if(!q)return;
- downloadQueue=null;clearTimeout(q.timer);clearTimeout(q.watchdog);
+ downloadQueue=null;clearTimeout(q.timer);
  window.removeEventListener('blur',q.blur);window.removeEventListener('focus',q.focus);refresh();
  parent.postMessage({pluginMessage:{type:'ready'}},'*');
 }
 function startDownloadQueue(anchors,message,run){
- stopDownloadQueue();const q={anchors,message,next:0,phase:'waiting',blurred:false,timer:null,watchdog:null};downloadQueue=q;
+ stopDownloadQueue();const q={anchors,message,next:0,phase:'ready',blurred:false,timer:null};downloadQueue=q;
  const finish=(text,tone)=>{stopDownloadQueue();message.textContent=text;el('status').className=tone;};
  const request=()=>{
   if(downloadQueue!==q)return;
+  // Long exports can finish with the iframe unfocused. Establish focus before opening a dialog,
+  // so its blur/focus pair belongs to this request rather than the user's earlier app switch.
+  q.phase='ready';if(!document.hasFocus())return;
   q.phase='waiting';q.blurred=false;q.saveEnd=exportTimer('save.dialog',run,{file:q.next+1});
   message.textContent='Choose where to save PDF '+(q.next+1)+' of '+anchors.length+'. Cancel skips this file.';el('status').className='queue';
-  // Desktop Figma drops overlapping Save dialogs. Wait for blur then focus before requesting another.
-  q.watchdog=setTimeout(()=>{if(downloadQueue===q&&!q.blurred){q.saveEnd('no-blur');finish('Automatic downloads paused. Please export again.','error');}},3000);
+  // Desktop Figma drops overlapping Save dialogs. A late blur must still be accepted:
+  // large files can take longer than three seconds before their native dialog opens.
   anchors[q.next++].click();
  };
- q.blur=()=>{if(downloadQueue===q&&q.phase==='waiting'){q.blurred=true;clearTimeout(q.watchdog);}};
+ q.blur=()=>{if(downloadQueue===q&&q.phase==='waiting'){q.blurred=true;}};
  q.focus=()=>{
-  if(downloadQueue!==q||q.phase!=='waiting'||!q.blurred)return;
-  q.saveEnd('focus-returned');q.phase='delay';q.blurred=false;clearTimeout(q.watchdog);
+  if(downloadQueue!==q)return;
+  if(q.phase==='ready'){request();return;}
+  if(q.phase!=='waiting'||!q.blurred)return;
+  q.saveEnd('focus-returned');q.phase='delay';q.blurred=false;
   if(q.next===anchors.length){finish('All '+anchors.length+' PDFs sent to save. Check your destination folder.','done');return;}
   message.textContent='Next PDF in a moment.';
-  q.timer=setTimeout(()=>{if(downloadQueue!==q)return;if(document.hasFocus())request();else{q.phase='waiting';q.blurred=true;}},1000);
+  q.timer=setTimeout(()=>{if(downloadQueue!==q)return;if(document.hasFocus())request();else q.phase='ready';},1000);
  };
- window.addEventListener('blur',q.blur);window.addEventListener('focus',q.focus);refresh();request();
+ window.addEventListener('blur',q.blur);window.addEventListener('focus',q.focus);refresh();
+ message.textContent='Choose where to save PDF 1 of '+anchors.length+'. Cancel skips this file.';request();
 }
 function showDownloads(outputs,run){
  stopDownloadQueue();
@@ -330,7 +336,7 @@ async function prepareDownloads(bytes,current){
  for(let i=0;i<converted.getPageCount();i++){
   const single=await PDFLib.PDFDocument.create();const [page]=await single.copyPages(converted,[i]);single.addPage(page);
   const sizes=current.auto?[current.sizes[i]]:null;
-  outputs.push({filename:current.filenames[i],bytes:await PrintCore.finish(await single.save(),current.icc,current.width,current.height,current.name,sizes,{bleeds:current.bleeds?[current.bleeds[i]]:[],fits:current.fits?[current.fits[i]]:null,marks:current.marks,pdfx:current.pdfx,rgb:current.rgb,title:current.filenames[i].replace(/\.pdf$/,'')})});
+  outputs.push({filename:current.filenames[i],bytes:await PrintCore.finishDocument(single,current.icc,current.width,current.height,current.name,sizes,{bleeds:current.bleeds?[current.bleeds[i]]:[],fits:current.fits?[current.fits[i]]:null,marks:current.marks,pdfx:current.pdfx,rgb:current.rgb,title:current.filenames[i].replace(/\.pdf$/,'')})});
  }
  return outputs;
 }

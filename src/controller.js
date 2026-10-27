@@ -102,8 +102,10 @@ function invert(m){const d=m[0][0]*m[1][1]-m[0][1]*m[1][0],a=m[1][1]/d,b=-m[0][1
 // A PNG's size is in its header, 16 bytes in.
 const pngWidth=png=>(png[16]<<24|png[17]<<16|png[18]<<8|png[19])>>>0,pngHeight=png=>(png[20]<<24|png[21]<<16|png[22]<<8|png[23])>>>0;
 // The window resizes PNGs, because the plugin sandbox can't decode images. Each request waits for its own reply.
-let shrinkId=0;const shrinking=new Map();
-function shrinkInWindow(png,width,height,run){const id=++shrinkId;return new Promise((resolve,reject)=>{shrinking.set(id,{resolve,reject});figma.ui.postMessage({type:'shrink',id,run,png,width,height});});}
+let shrinkId=0;const shrinking=new Map(),SHRINK_TIMEOUT_MS=60000;
+const exportCancelled=()=>Object.assign(new Error('Export cancelled.'),{cancelled:true});
+function cancelShrinking(){for(const request of shrinking.values()){clearTimeout(request.timer);request.reject(exportCancelled());}shrinking.clear();}
+function shrinkInWindow(png,width,height,run){const id=++shrinkId;return new Promise((resolve,reject)=>{const timer=setTimeout(()=>{shrinking.delete(id);reject(new Error('Image resize timed out.'));},SHRINK_TIMEOUT_MS);shrinking.set(id,{resolve,reject,timer});figma.ui.postMessage({type:'shrink',id,run,png,width,height});});}
 // Where the copy draws what the original draws inside bounds. Effects that reach past a layer, like texture, don't all grow when the copy is rescaled,
 // so the copy's own render bounds can be too small for the PNG; the original's, scaled by the copy's size, are not.
 function placeLike(original,copy,bounds) {
@@ -113,6 +115,7 @@ function placeLike(original,copy,bounds) {
 }
 // Covers the copied layer with a PNG of the original and hides the copy, keeping its place in any auto layout. Returns the image's ppi at print size.
 async function swapForImage(original,copy,topLevel,state) {
+ if(!state.current())throw exportCancelled();
  // state.print is how much the page is scaled for a custom page size, so the image reaches 300 ppi at the size it prints.
  const bounds=topLevel?original.absoluteBoundingBox:original.absoluteRenderBounds,target=topLevel?copy.absoluteBoundingBox:placeLike(original,copy,bounds);
  if(!bounds||!target||!bounds.width||!bounds.height)return Infinity;
@@ -120,9 +123,9 @@ async function swapForImage(original,copy,topLevel,state) {
  // Each stand-in in a frame is a pixel smaller than the last, so the window can tell them apart in Figma's PDF.
  const k=Math.min(full,(MAX_IMAGE_EDGE-state.rasters.length)/edge),ppi=Math.round(72*full/state.print);
  // A big layer is rendered once, at full resolution, and the window shrinks that PNG for the stand-in, which takes a second where rendering again takes Figma as long again.
- const exportAt=value=>timeExport('texture.render',state.run,{frame:state.frame,layer:state.images.length+1,scale:value},()=>original.exportAsync({format:'PNG',constraint:{type:'SCALE',value},useAbsoluteBounds:topLevel}));
+ const exportAt=async value=>{const png=await timeExport('texture.render',state.run,{frame:state.frame,layer:state.images.length+1,scale:value},()=>original.exportAsync({format:'PNG',constraint:{type:'SCALE',value},useAbsoluteBounds:topLevel}));if(!state.current())throw exportCancelled();return png;};
  const large=full>k?await exportAt(full):null;let png=null;
- if(large){const width=pngWidth(large),height=pngHeight(large),fit=(MAX_IMAGE_EDGE-state.rasters.length)/Math.max(width,height);try{png=await timeExport('texture.shrink-transfer',state.run,{frame:state.frame,layer:state.images.length+1,bytes:large.length,width,height},()=>shrinkInWindow(large,Math.max(1,Math.round(width*fit)),Math.max(1,Math.round(height*fit)),state.run));}catch(error){/* Figma renders the stand-in instead. */}}
+ if(large){const width=pngWidth(large),height=pngHeight(large),fit=(MAX_IMAGE_EDGE-state.rasters.length)/Math.max(width,height);try{png=await timeExport('texture.shrink-transfer',state.run,{frame:state.frame,layer:state.images.length+1,bytes:large.length,width,height},()=>shrinkInWindow(large,Math.max(1,Math.round(width*fit)),Math.max(1,Math.round(height*fit)),state.run));}catch(error){if(error.cancelled||!state.current())throw exportCancelled();/* Figma renders the stand-in instead. */}}
  if(!png)png=await exportAt(k);
  // Until Figma has decoded a new image it paints the fill as one flat colour, so wait for it and check the PDF later.
  const imageEnd=exportTimer('image.create-size',state.run,{frame:state.frame,layer:state.images.length+1,bytes:png.length});
@@ -167,7 +170,7 @@ async function rasterise(original,copy,state,topLevel=false) {
 // Returns the PDF, the factor its page must be scaled down by, and full-resolution PNGs for the window to swap in. The copy never touches the original.
 // print is how much a custom page size scales the frame; effects are rendered for that size.
 // A frame with bleed is exported from a copy inside a clipping frame of trim plus bleed, without the bleed layer's guide outline or the trim outline.
-async function exportFrame(node,found,bleed=0,print=1,run,frame) {
+async function exportFrame(node,found,bleed=0,print=1,run,frame,current=()=>true) {
  if(!found.effects&&!bleed)return {pdf:await timeExport('figma.pdf',run,{frame,fallback:!!found.effects},()=>node.exportAsync({format:'PDF'})),scale:1};
  const outer=shown(node),width=outer.width+2*bleed,height=outer.height+2*bleed;
  const scale=found.effects?Math.min((TARGET_PPI/EFFECT_PPI+0.02)*print,MAX_EFFECT_EDGE/(2*Math.max(width,height))):1;
@@ -182,7 +185,7 @@ async function exportFrame(node,found,bleed=0,print=1,run,frame) {
    else{const [[a,c],[b,d]]=copy.relativeTransform,xs=[0,a*node.width,c*node.height,a*node.width+c*node.height],ys=[0,b*node.width,d*node.height,b*node.width+d*node.height];copy.relativeTransform=[[a,c,bleed-Math.min(...xs)],[b,d,bleed-Math.min(...ys)]];}const guide=await bleedLayerOf(copy),trim=await layerOf(copy,trimLayer);if(guide)guide.strokes=[];if(trim)trim.visible=false;
   }else figma.currentPage.appendChild(copy);
   const target=wrapper||copy;if(scale!==1)target.rescale(scale);copied=true;cloneEnd();cloneEnd=null;
-  const state={images:[],rasters:[],print,run,frame},ppi=found.effects?Math.min(Math.round(EFFECT_PPI*scale/print),found.raster?await rasterise(node,copy,state,true):Infinity):null;
+  const state={images:[],rasters:[],print,run,frame,current},ppi=found.effects?Math.min(Math.round(EFFECT_PPI*scale/print),found.raster?await rasterise(node,copy,state,true):Infinity):null;
   let pdf=await timeExport('figma.pdf',run,{frame,attempt:0},()=>target.exportAsync({format:'PDF'}));
   const ready=()=>{const end=exportTimer('image.check-pdf',run,{frame,images:state.images.length,bytes:pdf.length}),ok=hasImages(pdf,state.images);end(ok?'ready':'pending');return ok;};
   for(let attempt=0;!ready();attempt++){if(attempt===RETRIES)throw new Error('Figma didn’t finish preparing the image. Try exporting again.');await timeExport('image.retry-wait',run,{frame,attempt:attempt+1,images:state.images.length},()=>new Promise(resolve=>setTimeout(resolve,RETRY_MS*(attempt+1))));pdf=await timeExport('figma.pdf',run,{frame,attempt:attempt+1},()=>target.exportAsync({format:'PDF'}));}
@@ -190,6 +193,7 @@ async function exportFrame(node,found,bleed=0,print=1,run,frame) {
  }
  catch(error){
   if(cloneEnd)cloneEnd('error');
+  if(error.cancelled)throw error;
   if(found.raster)throw new Error('Couldn’t render the noise or texture in '+node.name+(copied?': '+(error.message||error):'. Figma needs to make a temporary copy of the frame, so check you can edit this file.'));
   if(bleed)throw new Error('Couldn’t add the bleed to '+node.name+(copied?': '+(error.message||error):'. Figma needs to make a temporary copy of the frame, so check you can edit this file.'));
   return {pdf:await timeExport('figma.pdf',run,{frame,fallback:!!found.effects},()=>node.exportAsync({format:'PDF'})),scale:1,ppi:Math.round(EFFECT_PPI/print)};
@@ -301,7 +305,7 @@ async function runExport(ids,id,prints,run=id) {
   const issues=[],effects=nodes.map(n=>inspect(n,issues,n));
   if(issues.length){if(current())figma.ui.postMessage({type:'error',text:issues.slice(0,5).map(i=>i.text).join('\n'),issues});return;}
   const pdfs=[],sizes=[],bleeds=[],scales=[],ppi=[],rasters=[];
-  for(let i=0;i<nodes.length;i++){if(!current())return;figma.ui.postMessage({type:'status',text:'Exporting frame '+(i+1)+' of '+nodes.length+'…'});sizes.push(shown(nodes[i]));bleeds.push(await bleedOfNode(nodes[i]));const print=Array.isArray(prints)&&prints[i]>0&&prints[i]<=100?prints[i]:1;const result=await exportFrame(nodes[i],effects[i],bleeds[i],print,run,i+1);pdfs.push(result.pdf);scales.push(result.scale);rasters.push(result.rasters||[]);if(result.ppi)ppi.push(result.ppi);}
+  for(let i=0;i<nodes.length;i++){if(!current())return;figma.ui.postMessage({type:'status',text:'Exporting frame '+(i+1)+' of '+nodes.length+'…'});sizes.push(shown(nodes[i]));bleeds.push(await bleedOfNode(nodes[i]));const print=Array.isArray(prints)&&prints[i]>0&&prints[i]<=100?prints[i]:1;const result=await exportFrame(nodes[i],effects[i],bleeds[i],print,run,i+1,current);pdfs.push(result.pdf);scales.push(result.scale);rasters.push(result.rasters||[]);if(result.ppi)ppi.push(result.ppi);}
   if(current())figma.ui.postMessage({type:'pdfs',run,sentAt:Date.now(),pdfs,sizes,bleeds,scales,rasters,effectPpi:ppi.length?Math.min(...ppi):null});
  }catch(error){outcome='error';if(current())figma.ui.postMessage({type:'error',text:error.message||String(error)});}
  finally{end(current()?outcome:'cancelled');}
@@ -315,8 +319,8 @@ figma.ui.onmessage=async msg=>{
  // Selects a layer that may be on another page, such as an instance's main component.
  if(msg.type==='select-layer'){try{const node=await figma.getNodeByIdAsync(String(msg.id));let page=node;while(page&&page.type!=='PAGE')page=page.parent;if(!node||!page)return;if(page!==figma.currentPage)await figma.setCurrentPageAsync(page);figma.currentPage.selection=[node];figma.viewport.scrollAndZoomIntoView([node]);}catch(error){/* The layer was deleted. */}return;}
  if(msg.type==='new-frame'){try{newPaperFrame(String(msg.size));}catch(error){figma.ui.postMessage({type:'error',text:error.message||String(error)});}await selection();return;}
- if(msg.type==='shrunk'){const request=shrinking.get(msg.id);if(request){shrinking.delete(msg.id);if(msg.png)request.resolve(msg.png);else request.reject(new Error(msg.error||'Couldn’t resize the image.'));}return;}
- if(msg.type==='cancel'){exportId++;return;}
+ if(msg.type==='shrunk'){const request=shrinking.get(msg.id);if(request){clearTimeout(request.timer);shrinking.delete(msg.id);if(msg.png)request.resolve(msg.png);else request.reject(new Error(msg.error||'Couldn’t resize the image.'));}return;}
+ if(msg.type==='cancel'){exportId++;cancelShrinking();return;}
  if(msg.type==='open-feedback'){if(typeof msg.url==='string'&&msg.url.startsWith('mailto:'))figma.openExternal(msg.url);return;}
  if(msg.type==='show-bleed'||msg.type==='hide-bleed'){
   try{

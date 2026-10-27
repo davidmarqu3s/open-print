@@ -29,7 +29,7 @@ Compare `texture.render`, `texture.shrink-transfer`, `image.create-size`, `image
 - **Noise and texture:** rasterised at 300 ppi, up to 8,192 pixels on the longest side (about 694 mm). Figma images stop at 4,096 pixels, so a bigger layer is rendered once at full resolution, the plugin window shrinks that PNG into a 4,096 px stand-in for Figma’s PDF, and then swaps the full-resolution PNG back in, encoded as JPEG with an alpha mask like Figma’s own images. Each stand-in in a frame is a pixel smaller than the last so it can be found; if it can’t be, the stand-in stays and the lower ppi is reported. They need the temporary copy, so view-only files can’t export them.
 - **PDF clean-up:** hidden font layers and stray close-path commands are removed, and simple alpha masks use white mask paint so they import consistently into Illustrator.
 - **Boxes:** without bleed or marks, MediaBox, CropBox, TrimBox and BleedBox match the page. With bleed, the TrimBox is the frame and the BleedBox adds the bleed; crop marks extend the MediaBox.
-- **Individual PDFs:** duplicate names get a numbered suffix, and path separators and control characters become underscores. If the plugin can’t detect a Save dialog, it pauses; export again to retry.
+- **Individual PDFs:** duplicate names get a numbered suffix, and path separators and control characters become underscores. The plugin waits for iframe focus before starting, then for each dialog’s blur/focus pair before requesting the next file. A slow dialog stays queued; a timeout cannot prove it closed.
 - **Engine:** `vendor/ghostscript.wasm`, downloaded from `raw.githubusercontent.com` at commit `436f731`, checked against a fixed size and SHA-256. The manifest allows network access to that one URL only.
 
 ## Custom profile builds
@@ -91,3 +91,7 @@ Changes reach `main` through pull requests and don’t create releases on their 
 1. In a pull request, bump `version` in `package.json` and move the **Unreleased** notes in `CHANGELOG.md` under that version and date. Merge it once the tests pass.
 2. On GitHub, draft a new release with a new tag `v` plus that version (for example `v0.1.0`) on `main`, paste the changelog notes and publish it. A workflow then builds and attaches the plugin zip and the Ghostscript source zip.
 3. Publish a new version of the [Community plugin](https://www.figma.com/community/plugin/1688920299289399456) from that plugin zip, using the same notes.
+
+## PDF preparation benchmark
+
+Run `node scripts/benchmark-pdf-preparation.cjs` to compare individual-PDF finishing with and without the intermediate save/load round trip. It creates one synthetic 72 MiB, three-page A1 PDF, then runs each path three times in fresh Node processes against that same input. Image/content-stream hashes, dimensions and page boxes must match. Output sizes are reported separately because timestamps can change compressed metadata. Timings and memory samples cover PDF preparation; they don’t measure Figma rendering, native Save dialogs or total export time. Memory is sampled between pages, not continuously.

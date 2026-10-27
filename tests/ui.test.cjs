@@ -88,11 +88,19 @@ test('consecutive downloads hide the conversion cancel button',()=>{
  h.emit('blur');h.emit('focus');h.runTimers(1000);assert.equal(pdfClicks(h).length,2);
  assert.doesNotMatch(h.el('status').textContent,/Stop remaining downloads/i);
 });
-test('no native save dialog pauses the queue instead of dropping later downloads',()=>{
- const h=ui();h.context.showDownloads(threeDownloads());h.runTimers(3000);
- assert.equal(pdfClicks(h).length,1);assert.match(h.el('status').textContent,/paused|could not detect|didn.t detect/i);
- h.emit('blur');h.emit('focus');h.runTimers(5000);assert.equal(pdfClicks(h).length,1);
- assert.equal(listenerCount(h),0);assert.equal(h.timers.size,0);
+test('a late native Save dialog keeps the remaining PDFs queued',()=>{
+ const h=ui();h.context.showDownloads(threeDownloads());h.runTimers(10000);
+ assert.equal(pdfClicks(h).length,1);assert.equal(listenerCount(h),2);assert.equal(h.el('export').disabled,true);
+ h.emit('blur');h.runTimers(10000);assert.equal(pdfClicks(h).length,1);
+ h.emit('focus');h.runTimers(1000);assert.equal(pdfClicks(h).length,2);
+ h.emit('blur');h.emit('focus');h.runTimers(1000);assert.equal(pdfClicks(h).length,3);
+ h.emit('blur');h.emit('focus');assert.equal(listenerCount(h),0);assert.equal(h.timers.size,0);
+});
+test('an export finishing unfocused waits for focus before its first Save dialog',()=>{
+ const h=ui();h.emit('blur');h.context.showDownloads(threeDownloads());h.runTimers(10000);assert.equal(pdfClicks(h).length,0);
+ h.emit('focus');assert.equal(pdfClicks(h).length,1);h.runTimers(10000);assert.equal(pdfClicks(h).length,1);
+ h.emit('blur');h.emit('focus');h.runTimers(1000);assert.equal(pdfClicks(h).length,2);
+ h.context.stopDownloadQueue();assert.equal(listenerCount(h),0);assert.equal(h.timers.size,0);
 });
 test('a new export stops delivery before revoking previous download URLs',async()=>{
  const h=ui();await h.window.onmessage({data:{pluginMessage:{type:'selection',frames:[frame('1',595,842),frame('2',907,1276)]}}});
@@ -102,8 +110,7 @@ test('a new export stops delivery before revoking previous download URLs',async(
 });
 test('focus lost during the gap waits for another focus before requesting the next PDF',()=>{
  const h=ui();h.context.showDownloads(threeDownloads());h.emit('blur');h.emit('focus');h.emit('blur');h.runTimers(1000);
- assert.equal(pdfClicks(h).length,1);h.emit('focus');h.runTimers(999);assert.equal(pdfClicks(h).length,1);
- h.runTimers(1);assert.equal(pdfClicks(h).length,2);
+ assert.equal(pdfClicks(h).length,1);h.emit('focus');assert.equal(pdfClicks(h).length,2);
 });
 
 const select=(h,frames)=>h.window.onmessage({data:{pluginMessage:{type:'selection',frames}}});
@@ -214,3 +221,11 @@ test('full-resolution textures are swapped into the PDF, and one that can\u2019t
  const kept=await run(false);assert.deepEqual(kept.widths,[4]);assert.match(kept.status,/Effects are 150 ppi/);
 });
 test('Send feedback opens an email to the maintainer with the version and colour settings',async()=>{const {el,messages}=ui();el('feedback').onclick();const url=messages.at(-1).url;assert.equal(messages.at(-1).type,'open-feedback');assert.match(url,/^mailto:d@davidmarqu\.es\?subject=Open%20Print%20feedback&body=/);assert.match(decodeURIComponent(url.split('body=')[1]),/Open Print 0\.1\.0 · CMYK/);el('color-mode').value='rgb';el('color-mode').onchange();el('feedback').onclick();assert.match(decodeURIComponent(messages.at(-1).url),/Open Print 0\.1\.0 · RGB$/);});
+
+test('individual PDF finishing loads the source once without serialising and reloading each copied page',async()=>{
+ const {context}=ui(),current=exportFixture(),bytes=await convertedPages();
+ const lib=vm.runInContext('PDFLib',context),load=lib.PDFDocument.load;let loads=0;
+ lib.PDFDocument.load=async(...args)=>{loads++;return load.apply(lib.PDFDocument,args);};
+ const outputs=await context.prepareDownloads(bytes,current);assert.equal(loads,1);
+ for(let i=0;i<outputs.length;i++)await inspectOutput(outputs[i].bytes,[current.sizes[i]],current.icc);
+});
