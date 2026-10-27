@@ -12,7 +12,7 @@ Read [docs/development.md](docs/development.md) for building, testing, how expor
 
 - Run `npm run build` before `npm test`, because the tests read `dist/`.
 - The tests use a fake Figma, so check UI changes in Figma desktop too.
-- A new system package needed by the tests (such as poppler for `pdftoppm`) must be installed in `test.yml`, `latest-build.yml` and `release.yml`.
+- A new system package needed by the tests (such as poppler for `pdftoppm`) must be installed in `test.yml` and `release.yml`.
 - The build fails if the plugin code exceeds Figma's 15,000,000-byte limit.
 
 ## Code and copy
