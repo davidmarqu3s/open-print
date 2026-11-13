@@ -4,6 +4,8 @@ Notable changes to Open Print. Each release’s notes are also used on GitHub Re
 
 ## Unreleased
 
+- Added a French interface, used automatically on French-language systems and browsers.
+
 ## 0.2.1 – 27 October 2026
 
 - Improved consecutive PDF saving when Save dialogs open slowly or an export finishes while Figma is unfocused.
