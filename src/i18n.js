@@ -4,8 +4,8 @@
 const OpenPrintI18n=(()=>{
  const locales=typeof LOCALES==='undefined'?{}:LOCALES;
  const languages=typeof navigator==='undefined'?[]:[...(navigator.languages||[]),navigator.language].filter(Boolean);
- const language=languages.map(tag=>tag.toLowerCase().split('-')[0]).find(code=>code==='en'||locales[code])||'en';
- const strings=locales[language]||{};
+ const automatic=languages.map(tag=>tag.toLowerCase().split('-')[0]).find(code=>code==='en'||locales[code])||'en';
+ let preference='auto',language=automatic,strings=locales[language]||{};
  const fill=(text,values)=>text.replace(/\{(\w+)\}/g,(match,key)=>key in values?values[key]:match);
  // Messages written outside the window (the controller, core checks, the engine) arrive as finished English,
  // so templates with placeholders are matched against the whole message.
@@ -21,15 +21,27 @@ const OpenPrintI18n=(()=>{
   for(const {pattern,names,translation} of patterns||(patterns=compile())){const match=pattern.exec(text);if(match)return fill(translation,Object.fromEntries(names.map((name,i)=>[name,match[i+1]])));}
   return text;
  }
- // Translates the window's fixed text and labels once, before menus copy them and before any layer names appear.
+ // Capture only the initial interface, before layer names and other user content arrive.
+ // Keep English originals so switching back never tries to reverse a translation.
+ let originalText=null,originalAttributes=null;
  function translateDocument(root){
-  if(language==='en'||!root||typeof document.createTreeWalker!=='function')return;
+  if(!root||typeof document.createTreeWalker!=='function')return;
   document.documentElement.lang=language;
-  const walker=document.createTreeWalker(root,NodeFilter.SHOW_TEXT);
-  for(let node=walker.nextNode();node;node=walker.nextNode()){const text=node.nodeValue.trim();if(text&&t(text)!==text)node.nodeValue=node.nodeValue.replace(text,t(text));}
-  for(const element of root.querySelectorAll('[title],[aria-label],[placeholder],optgroup[label]'))for(const name of ['title','aria-label','placeholder','label'])if(element.hasAttribute(name))element.setAttribute(name,t(element.getAttribute(name)));
+  if(!originalText){
+   originalText=[];originalAttributes=[];
+   const walker=document.createTreeWalker(root,NodeFilter.SHOW_TEXT);
+   for(let node=walker.nextNode();node;node=walker.nextNode())if(!node.parentElement.closest('script,style')&&node.nodeValue.trim())originalText.push([node,node.nodeValue]);
+   for(const element of root.querySelectorAll('[title],[aria-label],[placeholder],optgroup[label]'))for(const name of ['title','aria-label','placeholder','label'])if(element.hasAttribute(name))originalAttributes.push([element,name,element.getAttribute(name)]);
+  }
+  for(const [node,text] of originalText)if(node.isConnected)node.nodeValue=text.replace(text.trim(),t(text.trim()));
+  for(const [element,name,text] of originalAttributes)if(element.isConnected)element.setAttribute(name,t(text));
  }
- return {language,t,translateDocument};
+ function setLanguage(value){
+  preference=value==='en'||Object.prototype.hasOwnProperty.call(locales,value)?value:'auto';
+  language=preference==='auto'?automatic:preference;strings=locales[language]||{};patterns=null;
+  if(typeof document!=='undefined')translateDocument(document.body);
+ }
+ return {get language(){return language;},get preference(){return preference;},setLanguage,t,translateDocument};
 })();
 const t=OpenPrintI18n.t;
 if(typeof document!=='undefined')OpenPrintI18n.translateDocument(document.body);

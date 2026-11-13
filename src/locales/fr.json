@@ -172,5 +172,11 @@
  "Could not download the conversion engine. Please try again.": "Impossible de télécharger le moteur de conversion. Veuillez réessayer.",
  "The conversion engine could not be verified. Please try again.": "Le moteur de conversion n’a pas pu être vérifié. Veuillez réessayer.",
  "This file uses a gradient type that cannot be converted to CMYK yet (shading type {type}).": "Ce fichier utilise un type de dégradé qui ne peut pas encore être converti en CMJN (type de dégradé {type}).",
- "Gradient colour conversion failed. Please try again.": "La conversion des couleurs du dégradé a échoué. Veuillez réessayer."
+ "Gradient colour conversion failed. Please try again.": "La conversion des couleurs du dégradé a échoué. Veuillez réessayer.",
+ "Settings": "Paramètres",
+ "Language": "Langue",
+ "Automatic": "Automatique",
+ "English": "English",
+ "Français": "Français",
+ "Language changed for this session. Figma could not save it for next time.": "La langue a été modifiée pour cette session. Figma n’a pas pu l’enregistrer pour la prochaine fois."
 }

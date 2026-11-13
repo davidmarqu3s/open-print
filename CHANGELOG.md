@@ -4,7 +4,7 @@ Notable changes to Open Print. Each release’s notes are also used on GitHub Re
 
 ## Unreleased
 
-- Added a French interface, used automatically on French-language systems and browsers.
+- Added a French interface, with automatic language detection and a saved language choice in Settings.
 
 ## 0.2.1 – 27 October 2026
 

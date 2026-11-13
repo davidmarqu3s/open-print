@@ -32,3 +32,13 @@ test('finished English messages from the controller and core are translated with
  assert.equal(t('Export {count} {mode} PDFs',{count:3,mode:t('CMYK')}),'Exporter 3 PDF CMJN');
  assert.equal(t('Something new'),'Something new');
 });
+test('an explicit choice overrides detection, and Automatic restores it',()=>{
+ const api=i18n(['fr-FR']);api.setLanguage('en');assert.equal(api.language,'en');assert.equal(api.preference,'en');assert.equal(api.t('Bleed'),'Bleed');
+ api.setLanguage('auto');assert.equal(api.language,'fr');assert.equal(api.preference,'auto');assert.equal(api.t('Bleed'),'Fond perdu');
+ api.setLanguage('unknown');assert.equal(api.language,'fr');assert.equal(api.preference,'auto');
+});
+test('switching languages rebuilds finished-message matching',()=>{
+ const api=i18n(['en']);api.setLanguage('fr');assert.equal(api.t('Exporting frame 2 of 5…'),'Exportation de la frame 2 sur 5…');
+ api.setLanguage('en');assert.equal(api.t('Exporting frame 2 of 5…'),'Exporting frame 2 of 5…');
+ api.setLanguage('fr');assert.equal(api.t('Exporting frame 2 of 5…'),'Exportation de la frame 2 sur 5…');
+});

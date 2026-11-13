@@ -67,7 +67,7 @@ function nameNode(text){
  const name=document.createElement('span'),start=document.createElement('span'),end=document.createElement('span'),chars=[...text],cut=tailStart(chars);
  name.className='name';name.title=text;start.className='start';end.className='end';start.textContent=chars.slice(0,cut).join('');end.textContent=chars.slice(cut).join('');name.append(start,end);return name;
 }
-const ISSUE_LABELS={effect:t('Unsupported effect')},ISSUES_PER_FRAME=3;
+const ISSUE_LABELS={effect:'Unsupported effect'},ISSUES_PER_FRAME=3;
 // Preflight limits at print size, after any scaling to a typed page size. Errors are things the printer will reject or that print visibly wrong; warnings are worth a look.
 const PREFLIGHT={lowPpi:150,targetPpi:300,smallText:6,richText:12,safe:3,hairline:0.25,bleed:3},POINTS_PER_MM=72/25.4;
 let checks=new Map(),checksOpen=false,openFrames=new Set();
@@ -76,7 +76,7 @@ function preflightIssues(frame){
  const fit=fitFor(frame),scale=fit?fit.scale:1,pt=v=>Math.round(v*scale*10)/10+' pt',out=[];
  const add=(severity,label,f)=>out.push({severity,label,name:f.name,nodeId:f.nodeId,frameId:frame.id});
  for(const f of check.findings){
-  if(f.kind==='effect')add('error',ISSUE_LABELS.effect,f);
+  if(f.kind==='effect')add('error',t(ISSUE_LABELS.effect),f);
   if(f.kind==='image'){const ppi=Math.round(f.ppi/scale);if(ppi<PREFLIGHT.targetPpi)add(ppi<PREFLIGHT.lowPpi?'error':'warning',t('{ppi} ppi image',{ppi}),f);}
   if(f.kind==='stroke'&&f.weight*scale<PREFLIGHT.hairline)add('warning',t('{weight} hairline',{weight:pt(f.weight)}),f);
   if(f.kind==='bleed')add('warning',t('Needs bleed'),f);
@@ -107,7 +107,7 @@ function issueRow(issue,warning){
 // Export errors always show. Preflight problems show when the footer line is open, a few per frame unless that frame is expanded.
 function renderIssues(frame){
  const own=checksOpen?preflightIssues(frame):[];
- for(const issue of issues.filter(i=>i.frameId===frame.id))if(!own.some(i=>i.nodeId===issue.nodeId&&i.label===(ISSUE_LABELS[issue.kind]||t('Issue'))))own.unshift({severity:'error',label:ISSUE_LABELS[issue.kind]||t('Issue'),name:issue.name,nodeId:issue.nodeId,frameId:frame.id});
+ for(const issue of issues.filter(i=>i.frameId===frame.id))if(!own.some(i=>i.nodeId===issue.nodeId&&i.label===(t(ISSUE_LABELS[issue.kind]||'Issue'))))own.unshift({severity:'error',label:t(ISSUE_LABELS[issue.kind]||'Issue'),name:issue.name,nodeId:issue.nodeId,frameId:frame.id});
  const shown=openFrames.has(frame.id)?own:own.slice(0,ISSUES_PER_FRAME);
  for(const issue of shown)el('frames').append(issueRow(issue,issue.severity==='warning'));
  if(own.length>shown.length){const li=document.createElement('li'),more=document.createElement('button');li.className='issue more';more.className='link';more.textContent=t('{count} more in this frame',{count:own.length-shown.length});more.onclick=()=>{openFrames.add(frame.id);renderFrames();};li.append(more);el('frames').append(li);}
@@ -120,7 +120,7 @@ function fieldInvalid(id){if(autoSize||dimensions[id]===null)return false;try{Pr
 function profileProblem(){if(rgbOn()||el('profile-mode').value==='none'||profile)return '';const entry=PROFILE_CATALOG.find(p=>p.id===el('profile-mode').value);return entry?t('Import {profile} to export.',{profile:entry.name}):t('Choose a CMYK profile to export.');}
 function refresh(){const invalid=frames.filter(f=>!printable(f)),problem=sizeProblem(),count=frames.length-invalid.length,separate=el('export-mode').value==='separate';const marking=marksProblem(),scaling=scaleProblem().text;el('export').disabled=busy||!!downloadQueue||!!profileProblem()||!frames.length||invalid.length>0||!!problem||!!marking||!!scaling;const kind=t(rgbOn()?'RGB':'CMYK');el('export').textContent=busy?t('Exporting…'):count<2?t('Export {mode} PDF',{mode:kind}):separate?t('Export {count} {mode} PDFs',{count,mode:kind}):t('Export {count}-page {mode} PDF',{count,mode:kind});el('export-hint').textContent=busy?'':!frames.length?'':invalid.length?(invalid.length===1?t('Only frames and components can be exported. Deselect “{name}”.',{name:invalid[0].name}):t('Only frames and components can be exported. Deselect {count} layers.',{count:invalid.length})):problem?'':marking?t('Fix the crop mark settings to export.'):scaling?t('Fix the bleed to export.'):profileProblem();
  const widthInvalid=fieldInvalid('width'),heightInvalid=fieldInvalid('height');el('width-field').className='field'+(widthInvalid?' invalid':'');el('height-field').className='field'+(heightInvalid?' invalid':'');el('size-error').textContent=problem;el('size-error').className='hint'+(widthInvalid||heightInvalid?' error':'');el('size-snap').disabled=busy||!!downloadQueue;el('frame-count').textContent=!frames.length?'':invalid.length?t('{count} selected',{count:frames.length}):frames.length===1?t('1 page'):t('{count} pages',{count:frames.length});el('cancel').hidden=!busy;el('cancel').textContent=t('Cancel');el('profile').disabled=busy||!!downloadQueue;el('profile-mode').disabled=busy||!!downloadQueue;el('color-mode').disabled=busy||!!downloadQueue;el('cmyk-options').hidden=rgbOn();el('color-section').className=rgbOn()?'collapsed':'';el('width').disabled=busy||!!downloadQueue;el('height').disabled=busy||!!downloadQueue;el('size-reset').disabled=busy||!!downloadQueue;el('units').disabled=busy||!!downloadQueue;el('new-frame').disabled=busy||!!downloadQueue;newFrameLabel();el('export-options').hidden=count<2;el('export-mode').disabled=busy||!!downloadQueue;
- const locked=busy||!!downloadQueue,bleeds=frames.map(frameBleed).filter(b=>b),shown=[...new Set(bleeds)];
+ const locked=busy||!!downloadQueue;el('language').disabled=locked;if(!locked&&pendingLanguage!==null){const value=pendingLanguage;pendingLanguage=null;applyLanguage(value,false);}const bleeds=frames.map(frameBleed).filter(b=>b),shown=[...new Set(bleeds)];
  // The header button is − once every selected frame has bleed, otherwise +. The amount shows once any frame has bleed, and editing it resizes that bleed.
  // Instances can't take new layers, so the button acts on frames and components only, and instances show their main component's bleed.
  const owners=frames.filter(editable),instances=frames.filter(f=>f.type==='INSTANCE'),anyBleed=bleeds.length>0;
@@ -205,6 +205,8 @@ el('feedback').onclick=()=>parent.postMessage({pluginMessage:{type:'open-feedbac
 el('cancel').onclick=()=>{parent.postMessage({pluginMessage:{type:'cancel'}},'*');stop();status('Export cancelled.');};
 window.onmessage=async event=>{
  const msg=event.data.pluginMessage;if(!msg)return;
+ if(msg.type==='settings'&&!languageChosen)applyLanguage(msg.language);
+ if(msg.type==='language-storage-error')status('Language changed for this session. Figma could not save it for next time.','error');
  if(msg.type==='profiles'){for(const entry of PROFILE_CATALOG){const encoded=msg.profiles && msg.profiles[entry.id];if(typeof encoded==='string' && !profiles[entry.id]){try{const bytes=decodeProfile(encoded);PrintCore.validateICC(bytes);if(PrintCore.profileDescription(bytes)===entry.name)profiles[entry.id]=encoded;}catch(error){/* Ignore invalid stored files. */}}}if(!busy&&!downloadQueue)chooseProfile(false);}
  if(msg.type==='profile-storage-error')status('Profile imported for this session. Figma could not save it for next time.','error');
  if(msg.type==='selection'){if(busy||downloadQueue)return;frames=msg.frames.sort((a,b)=>a.name.localeCompare(b.name,undefined,{numeric:true}));
@@ -340,6 +342,20 @@ async function prepareDownloads(bytes,current){
  }
  return outputs;
 }
+function profileHint(){
+ const mode=el('profile-mode').value,entry=PROFILE_CATALOG.find(p=>p.id===mode);
+ el('profile-hint').textContent=mode==='none'?t('Exports CMYK using the default conversion. No ICC profile is embedded.'):entry?(profile?'':t('This profile isn’t bundled. Import its ICC file once; Figma keeps it locally when storage has space.')):profile?t('Using {profile}. It will be embedded in the PDF.',{profile:profileName}):t('Choose your printer’s CMYK ICC profile. It will be embedded in the PDF.');
+ el('profile-hint').hidden=!el('profile-hint').textContent;
+}
+let languageChosen=false,pendingLanguage=null;
+function applyLanguage(value,clear=true){
+ if(busy||downloadQueue){pendingLanguage=value;return;}
+ OpenPrintI18n.setLanguage(value);el('language').value=OpenPrintI18n.preference;
+ for(const [group,source] of profileGroups)group.label=t(source);
+ if(clear)status('');profileHint();updateSize();renderFrames();refresh();
+}
+el('language').value='auto';
+el('language').onchange=()=>{if(busy||downloadQueue)return;languageChosen=true;const language=el('language').value;applyLanguage(language);parent.postMessage({pluginMessage:{type:'set-language',language}},'*');};
 function chooseProfile(invalidate=true){
  stopDownloadQueue();
  if(invalidate)++profileRead;const mode=el('profile-mode').value;const entry=PROFILE_CATALOG.find(p=>p.id===mode);
@@ -348,12 +364,13 @@ function chooseProfile(invalidate=true){
  else {profile=customProfile;profileName=customName;}
  if(profile)PrintCore.validateICC(profile);
  el('custom-profile').hidden=mode!=='custom'&&!!(profile||mode==='none');
- el('profile-hint').textContent=mode==='none'?t('Exports CMYK using the default conversion. No ICC profile is embedded.'):entry?(profile?'':t('This profile isn’t bundled. Import its ICC file once; Figma keeps it locally when storage has space.')):profile?t('Using {profile}. It will be embedded in the PDF.',{profile:profileName}):t('Choose your printer’s CMYK ICC profile. It will be embedded in the PDF.');
- el('profile-hint').hidden=!el('profile-hint').textContent;
+ profileHint();
  status('');refresh();
 }
-for(const group of [...new Set(PROFILE_CATALOG.map(p=>p.group))]){const optgroup=document.createElement('optgroup');optgroup.label=t(group);for(const entry of PROFILE_CATALOG.filter(p=>p.group===group)){const option=document.createElement('option');option.value=entry.id;option.textContent=entry.name;optgroup.append(option);}el('profile-mode').append(optgroup);}
+const profileGroups=[];
+for(const group of [...new Set(PROFILE_CATALOG.map(p=>p.group))]){const optgroup=document.createElement('optgroup');optgroup.label=t(group);profileGroups.push([optgroup,group]);for(const entry of PROFILE_CATALOG.filter(p=>p.group===group)){const option=document.createElement('option');option.value=entry.id;option.textContent=entry.name;optgroup.append(option);}el('profile-mode').append(optgroup);}
 el('profile-mode').value=profiles.CoatedFOGRA39?'CoatedFOGRA39':customProfile?'custom':'none';
 el('profile-mode').onchange=()=>{el('profile').value='';chooseProfile();};chooseProfile();
+parent.postMessage({pluginMessage:{type:'load-settings'}},'*');
 parent.postMessage({pluginMessage:{type:'load-profiles'}},'*');
 parent.postMessage({pluginMessage:{type:'ready'}},'*');

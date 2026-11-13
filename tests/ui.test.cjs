@@ -239,3 +239,19 @@ test('a French window shows French text and keeps export logic working',async()=
  el('export-mode').value='combined';el('mark-offset').value='5';el('mark-offset').oninput();assert.equal(el('export').disabled,false);el('export').onclick();
  await window.onmessage({data:{pluginMessage:{type:'status',text:'Exporting frame 1 of 1…'}}});assert.match(el('status').textContent,/Exportation de la frame 1 sur 1…Étape 1 sur 5/);
 });
+test('language selection updates existing UI without resetting export settings or layer names',async()=>{
+ const {window,el,messages,context}=ui({}, {LOCALES:{fr:JSON.parse(fs.readFileSync('src/locales/fr.json','utf8'))},navigator:{languages:['en']}});
+ await window.onmessage({data:{pluginMessage:{type:'selection',frames:[{...frame('1',595,842),name:'Bleed'}]}}});
+ el('width').value='250';el('width').oninput();el('height').value='350';el('height').oninput();el('color-mode').value='rgb';el('color-mode').onchange();el('pure-black').checked=false;
+ el('language').value='fr';el('language').onchange();
+ assert.equal(el('export').textContent,'Exporter en PDF RVB');assert.equal(el('width').value,'250');assert.equal(el('height').value,'350');assert.equal(el('color-mode').value,'rgb');assert.equal(el('pure-black').checked,false);assert.equal(vm.runInContext('frames[0].name',context),'Bleed');assert.equal(messages.at(-1).type,'set-language');assert.equal(messages.at(-1).language,'fr');
+ await window.onmessage({data:{pluginMessage:{type:'settings',language:'en'}}});assert.equal(el('language').value,'fr','a late startup reply cannot undo the user choice');
+ el('language').value='en';el('language').onchange();assert.equal(el('export').textContent,'Export RGB PDF');
+ el('language').value='auto';el('language').onchange();assert.equal(vm.runInContext('OpenPrintI18n.preference',context),'auto');assert.equal(el('export').textContent,'Export RGB PDF');
+});
+test('stored language overrides the system and the selector locks during export',async()=>{
+ const {window,el,context}=ui({}, {LOCALES:{fr:JSON.parse(fs.readFileSync('src/locales/fr.json','utf8'))},navigator:{languages:['en']}});
+ await window.onmessage({data:{pluginMessage:{type:'settings',language:'fr'}}});assert.equal(el('language').value,'fr');
+ await window.onmessage({data:{pluginMessage:{type:'selection',frames:[frame('1',595,842)]}}});el('color-mode').value='rgb';el('color-mode').onchange();el('export').onclick();
+ assert.equal(el('language').disabled,true);const current=vm.runInContext('job',context);el('language').value='en';el('language').onchange();assert.equal(vm.runInContext('job',context),current);assert.equal(vm.runInContext('OpenPrintI18n.language',context),'fr');
+});
