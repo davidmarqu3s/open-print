@@ -310,7 +310,12 @@ async function runExport(ids,id,prints,run=id) {
  }catch(error){outcome='error';if(current())figma.ui.postMessage({type:'error',text:error.message||String(error)});}
  finally{end(current()?outcome:'cancelled');}
 }
+let languageSave=Promise.resolve();
+const validLanguage=value=>typeof value==='string'&&['auto','en','fr'].includes(value);
 figma.ui.onmessage=async msg=>{
+ if(msg.type==='load-settings'){let language='auto';try{const saved=await figma.clientStorage.getAsync('open-print-language');if(validLanguage(saved))language=saved;}catch(error){/* Use automatic detection when storage is unavailable. */}figma.ui.postMessage({type:'settings',language});return;}
+ if(msg.type==='set-language'){if(!validLanguage(msg.language))return;try{languageSave=languageSave.catch(()=>{}).then(()=>figma.clientStorage.setAsync('open-print-language',msg.language));await languageSave;}catch(error){figma.ui.postMessage({type:'language-storage-error'});}return;}
+
  if(msg.type==='load-profiles'){try{figma.ui.postMessage({type:'profiles',profiles:await figma.clientStorage.getAsync('open-print-profiles')||{}});}catch(error){figma.ui.postMessage({type:'profiles',profiles:{}});}return;}
  if(msg.type==='save-profile'){try{if(typeof msg.id!=='string'||msg.id.length>100||typeof msg.encoded!=='string'||msg.encoded.length>7*1024*1024)throw new Error('Invalid profile');profileSave=profileSave.catch(()=>{}).then(async()=>{const profiles=await figma.clientStorage.getAsync('open-print-profiles')||{};profiles[msg.id]=msg.encoded;await figma.clientStorage.setAsync('open-print-profiles',profiles);});await profileSave;}catch(error){figma.ui.postMessage({type:'profile-storage-error'});}return;}
  if(msg.type==='resize'||msg.type==='resize-end'){const h=uiHeight(msg.height);figma.ui.resize(UI_WIDTH,h);if(msg.type==='resize-end')try{await figma.clientStorage.setAsync('open-print-height',h);}catch(error){/* The height is kept for this session only. */}return;}
