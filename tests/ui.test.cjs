@@ -1,5 +1,5 @@
 const {test}=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');const PDFLib=require('../vendor/pdf-lib.min.js');
-function ui(bundled={}){
+function ui(bundled={},extra={}){
  const elements={},clicks=[],blobs=new Map(),listeners=new Map(),timers=new Map(),revocations=[];let nextURL=0,nextTimer=0,now=0,focused=true;
  const emit=type=>{focused=type==='focus';for(const fn of [...(listeners.get(type)||[])])fn({type});};
  const runTimers=delay=>{const end=now+delay;for(;;){const next=[...timers].filter(([,t])=>t.at<=end).sort((a,b)=>a[1].at-b[1].at)[0];if(!next)break;timers.delete(next[0]);now=next[1].at;next[1].fn();}now=end;};
@@ -14,9 +14,9 @@ function ui(bundled={}){
  });
  const el=id=>elements[id]||(elements[id]=Object.assign(make('div'),{root:true,hidden:id==='size-reset'}));
  const window={addEventListener(type,fn){if(!listeners.has(type))listeners.set(type,new Set());listeners.get(type).add(fn);},removeEventListener(type,fn){listeners.get(type)?.delete(fn);}},messages=[];
- const context={window,setTimeout:(fn,delay)=>{const id=++nextTimer;timers.set(id,{fn,at:now+delay});return id;},clearTimeout:id=>timers.delete(id),document:{hasFocus:()=>focused,getElementById:el,createElement:make,createTextNode:text=>({textContent:text})},parent:{postMessage:x=>messages.push(x.pluginMessage)},PROFILE_CATALOG:JSON.parse(fs.readFileSync('src/profiles.json')),VERSION:'0.1.0',BUNDLED_PROFILES:bundled,OpenPrintAssets:{decodeProfile:encoded=>Uint8Array.from(atob(encoded),c=>c.charCodeAt(0))},atob,btoa,Uint8Array,DataView,Number,Error,TextEncoder,TextDecoder,Blob,URL:{createObjectURL:blob=>{const url='blob:test-'+(++nextURL);blobs.set(url,blob);return url;},revokeObjectURL:url=>{revocations.push({url,listeners:[...listeners.values()].reduce((n,set)=>n+set.size,0),timers:timers.size});blobs.delete(url);}}};
+ const context={window,setTimeout:(fn,delay)=>{const id=++nextTimer;timers.set(id,{fn,at:now+delay});return id;},clearTimeout:id=>timers.delete(id),document:{hasFocus:()=>focused,getElementById:el,createElement:make,createTextNode:text=>({textContent:text})},parent:{postMessage:x=>messages.push(x.pluginMessage)},PROFILE_CATALOG:JSON.parse(fs.readFileSync('src/profiles.json')),VERSION:'0.1.0',BUNDLED_PROFILES:bundled,OpenPrintAssets:{decodeProfile:encoded=>Uint8Array.from(atob(encoded),c=>c.charCodeAt(0))},atob,btoa,Uint8Array,DataView,Number,Error,TextEncoder,TextDecoder,Blob,...extra,URL:{createObjectURL:blob=>{const url='blob:test-'+(++nextURL);blobs.set(url,blob);return url;},revokeObjectURL:url=>{revocations.push({url,listeners:[...listeners.values()].reduce((n,set)=>n+set.size,0),timers:timers.size});blobs.delete(url);}}};
  vm.createContext(context);
- vm.runInContext(fs.readFileSync('vendor/pdf-lib.min.js','utf8'),context);vm.runInContext(fs.readFileSync('src/core.js','utf8'),context);vm.runInContext(fs.readFileSync('src/ui.js','utf8'),context);
+ vm.runInContext(fs.readFileSync('vendor/pdf-lib.min.js','utf8'),context);vm.runInContext(fs.readFileSync('src/core.js','utf8'),context);vm.runInContext(fs.readFileSync('src/i18n.js','utf8'),context);vm.runInContext(fs.readFileSync('src/ui.js','utf8'),context);
  return {window,el,messages,context,clicks,blobs,emit,runTimers,timers,listeners,revocations};
 }
 const frame=(id,width,height)=>({id,name:'Sheet '+id,type:'FRAME',width,height});
@@ -228,4 +228,30 @@ test('individual PDF finishing loads the source once without serialising and rel
  lib.PDFDocument.load=async(...args)=>{loads++;return load.apply(lib.PDFDocument,args);};
  const outputs=await context.prepareDownloads(bytes,current);assert.equal(loads,1);
  for(let i=0;i<outputs.length;i++)await inspectOutput(outputs[i].bytes,[current.sizes[i]],current.icc);
+});
+
+test('a French window shows French text and keeps export logic working',async()=>{
+ const locales={fr:JSON.parse(fs.readFileSync('src/locales/fr.json','utf8'))},{window,el}=ui({},{LOCALES:locales,navigator:{languages:['fr-FR'],language:'fr-FR'}});
+ await window.onmessage({data:{pluginMessage:{type:'selection',frames:[frame('1',595,842),frame('2',595,842)]}}});
+ assert.equal(el('export').textContent,'Exporter un PDF CMJN de 2 pages');assert.equal(el('frame-count').textContent,'2 pages');
+ await window.onmessage({data:{pluginMessage:{type:'selection',frames:[{...frame('1',595,842),bleed:5*72/25.4}]}}});el('marks-toggle').onclick();
+ assert.match(el('marks-error').textContent,/au moins égal au fond perdu \(5 mm\)/);assert.equal(el('mark-offset-field').className,'field plain invalid');assert.equal(el('export').disabled,true);
+ el('export-mode').value='combined';el('mark-offset').value='5';el('mark-offset').oninput();assert.equal(el('export').disabled,false);el('export').onclick();
+ await window.onmessage({data:{pluginMessage:{type:'status',text:'Exporting frame 1 of 1…'}}});assert.match(el('status').textContent,/Exportation de la frame 1 sur 1…Étape 1 sur 5/);
+});
+test('language selection updates existing UI without resetting export settings or layer names',async()=>{
+ const {window,el,messages,context}=ui({}, {LOCALES:{fr:JSON.parse(fs.readFileSync('src/locales/fr.json','utf8'))},navigator:{languages:['en']}});
+ await window.onmessage({data:{pluginMessage:{type:'selection',frames:[{...frame('1',595,842),name:'Bleed'}]}}});
+ el('width').value='250';el('width').oninput();el('height').value='350';el('height').oninput();el('color-mode').value='rgb';el('color-mode').onchange();el('pure-black').checked=false;
+ el('language').value='fr';el('language').onchange();
+ assert.equal(el('export').textContent,'Exporter en PDF RVB');assert.equal(el('width').value,'250');assert.equal(el('height').value,'350');assert.equal(el('color-mode').value,'rgb');assert.equal(el('pure-black').checked,false);assert.equal(vm.runInContext('frames[0].name',context),'Bleed');assert.equal(messages.at(-1).type,'set-language');assert.equal(messages.at(-1).language,'fr');
+ await window.onmessage({data:{pluginMessage:{type:'settings',language:'en'}}});assert.equal(el('language').value,'fr','a late startup reply cannot undo the user choice');
+ el('language').value='en';el('language').onchange();assert.equal(el('export').textContent,'Export RGB PDF');
+ el('language').value='auto';el('language').onchange();assert.equal(vm.runInContext('OpenPrintI18n.preference',context),'auto');assert.equal(el('export').textContent,'Export RGB PDF');
+});
+test('stored language overrides the system and the selector locks during export',async()=>{
+ const {window,el,context}=ui({}, {LOCALES:{fr:JSON.parse(fs.readFileSync('src/locales/fr.json','utf8'))},navigator:{languages:['en']}});
+ await window.onmessage({data:{pluginMessage:{type:'settings',language:'fr'}}});assert.equal(el('language').value,'fr');
+ await window.onmessage({data:{pluginMessage:{type:'selection',frames:[frame('1',595,842)]}}});el('color-mode').value='rgb';el('color-mode').onchange();el('export').onclick();
+ assert.equal(el('language').disabled,true);const current=vm.runInContext('job',context);el('language').value='en';el('language').onchange();assert.equal(vm.runInContext('job',context),current);assert.equal(vm.runInContext('OpenPrintI18n.language',context),'fr');
 });

@@ -15,6 +15,14 @@ Then import `manifest.json` in Figma desktop. Every pull request and every push 
 
 The tests cover sizing, profile validation and embedding, vector content, vector CMYK gradients, scaled effects, noise and texture, bleed and crop marks, image resolution, PDF clean-up, the engine download, preflight, export order, the plugin panel, and a check that original nodes are never modified. Sample artwork is not included.
 
+## Translations
+
+The interface is written in English, and each file in `src/locales` translates it into one language: `fr.json` maps each English string to its French version. Text in `{braces}` is filled in with numbers or names and must stay as it is, untranslated. Any string without a translation falls back to English.
+
+The Plugin API doesn’t expose Figma’s interface language. Automatic language selection uses the plugin window’s `navigator.languages`: the browser language on the web, or the system/app language on desktop, independently of Figma’s account setting. The settings menu above preflight offers Automatic, English and Français. The choice is saved in `figma.clientStorage` and overrides detection until Automatic is chosen again. `src/i18n.js` translates the fixed text in `ui.html` when the window opens, and `ui.js` passes everything else through `t()`. Messages from the controller and core checks reach the window as finished English sentences; they’re matched against the templates with placeholders and translated there.
+
+To add a language, copy `fr.json` to `<code>.json` (for example `de.json`) and translate the values. The tests fail if a string the window shows has no translation, or if a translation drops or renames a placeholder. Use the terms from Figma’s own interface in that language: in French, *frame* and *canvas* stay in English, a layer is a *calque* and a main component is a *composant principal*.
+
 ## Export timings
 
 The controller and plugin window write `[Open Print timing]` JSON records to Figma’s developer console. Records share a run ID and include a stage, elapsed milliseconds, and scalar metadata such as frame number, attempt, image dimensions and byte count. Artwork, layer names and PDF/image bytes are excluded. Nothing is stored or sent over the network.

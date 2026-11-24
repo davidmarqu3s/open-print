@@ -5,6 +5,7 @@
 const CHECK='<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.25" aria-hidden="true"><path d="M4.5 8.25 6.75 10.5 11.5 5.5"/></svg>';
 const PLUS='<svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M11.5 7h1v4.5H17v1h-4.5V17h-1v-4.5H7v-1h4.5z"/></svg>';
 const CHEVRON='<svg width="8" height="5" viewBox="0 0 8 5" fill="none" stroke="currentColor" stroke-width="1.2" aria-hidden="true"><path d="M.5.5 4 4 7.5.5"/></svg>';
+const GLOBE='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a17 17 0 0 1 0 18 17 17 0 0 1 0-18Z"/></svg>';
 let open=null,ids=0;
 function close(focus=false){if(!open)return;const {trigger,menu}=open;open=null;menu.remove();trigger.setAttribute('aria-expanded','false');trigger.removeAttribute('aria-activedescendant');if(focus)trigger.focus();}
 function enhance(select){
@@ -12,12 +13,12 @@ function enhance(select){
  trigger.type='button';trigger.className='select'+(select.classList.contains('compact')?' compact':'');trigger.setAttribute('aria-haspopup','listbox');trigger.setAttribute('aria-expanded','false');
  if(select.getAttribute('aria-label'))trigger.setAttribute('aria-label',select.getAttribute('aria-label'));
  // A select with class "add" is an action menu behind a + button, and its hidden first option keeps it showing no choice.
- if(select.classList.contains('add')){trigger.className='icon';trigger.title=select.getAttribute('aria-label')||'';trigger.innerHTML=PLUS;}else{label.className='select-label';trigger.append(label);trigger.insertAdjacentHTML('beforeend',CHEVRON);}
+ if(select.classList.contains('add')||select.classList.contains('settings')){trigger.className='icon';trigger.innerHTML=select.classList.contains('settings')?GLOBE:PLUS;}else{label.className='select-label';trigger.append(label);trigger.insertAdjacentHTML('beforeend',CHEVRON);}
  select.classList.add('native');select.tabIndex=-1;select.setAttribute('aria-hidden','true');select.after(trigger);
- const sync=()=>{const option=select.options[select.selectedIndex];label.textContent=option?option.textContent:'';trigger.disabled=select.disabled;if(select.disabled&&open&&open.select===select)close();};
+ const sync=()=>{const name=select.getAttribute('aria-label');if(name){trigger.setAttribute('aria-label',name);if(trigger.className==='icon')trigger.title=name;}const option=select.options[select.selectedIndex];label.textContent=option?option.textContent:'';trigger.disabled=select.disabled;if(select.disabled&&open&&open.select===select)close();};
  // ui.js sets value and disabled directly, which fires no events, so mirror them on the instance.
  for(const key of ['value','disabled','selectedIndex']){const base=Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype,key);Object.defineProperty(select,key,{configurable:true,get(){return base.get.call(this);},set(v){base.set.call(this,v);sync();}});}
- new MutationObserver(sync).observe(select,{childList:true,subtree:true,characterData:true});
+ new MutationObserver(sync).observe(select,{childList:true,subtree:true,characterData:true,attributes:true,attributeFilter:['aria-label']});
  const choose=value=>{close(true);if(select.value===value)return;select.value=value;select.dispatchEvent(new Event('change'));};
  const show=()=>{
   if(select.disabled)return;close();
